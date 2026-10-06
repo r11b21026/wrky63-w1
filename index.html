@@ -85,20 +85,16 @@
 
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
-      
-      <!-- 一鍵結合口袋特寫按鈕 -->
       <button id="btn-focus-interface" title="特寫核心結合口袋 (局部接觸側鏈與鹼基)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
 
-      <!-- 渲染樣式選單開關 -->
       <button id="btn-toggle-rep" title="樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
         <i data-lucide="palette" class="w-4 h-4"></i>
         <span class="hidden sm:inline">樣式設定</span>
       </button>
 
-      <!-- 重設全局視角 -->
       <button id="btn-reset-view" title="重設整體視角 (R 鍵)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="maximize" class="w-4 h-4"></i>
       </button>
@@ -157,9 +153,10 @@
           </select>
         </div>
         <div>
-          <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
+          <label class="block text-[11px] text-slate-400 mb-1">骨架顏色</label>
           <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="resname" selected>鹼基專屬色 (A/T/C/G)</option>
+            <option value="#cbd5e1" selected>經典銀白 (極力突顯內部橫竿)</option>
+            <option value="resname">鹼基色同調 (A/T/C/G)</option>
             <option value="element">Element CPK (碳黃/磷橘)</option>
             <option value="#f97316">ColorID 5: 亮橘 (Orange)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
@@ -240,11 +237,12 @@
       protStyle: 'newcartoon',
       protColor: 'sstruc',
       dnaStyle: 'vmd_ladder',
-      dnaColor: 'resname',
+      dnaColor: '#cbd5e1',
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
       ladderPairs: [],
+      ladderShapeComp: null,
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
@@ -297,9 +295,6 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    /**
-     * 自動偵測可讀取的 PDB 檔案 (防重整卡死與非同步鎖定)
-     */
     async function scanFolderFiles() {
       if (appState.isLoadingFile) return;
 
@@ -311,7 +306,7 @@
         return;
       }
 
-      showLoading('掃描 PDB 檔案中...', '請稍候');
+      showLoading('搜尋 PDB 檔案中...', '請稍候');
       let found = [];
 
       const hostname = window.location.hostname;
@@ -333,7 +328,6 @@
       }
 
       if (found.length === 0) {
-        // 常見候選清單
         const candidates = ['complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
         const checks = candidates.map(async (filename) => {
           try {
@@ -363,12 +357,13 @@
     }
 
     function getColorParams(colorVal) {
+      if (!colorVal) return { color: '#cbd5e1' };
       if (colorVal.startsWith('#')) return { color: colorVal };
       return { colorScheme: colorVal };
     }
 
     /**
-     * 【精準空間斷鏈算法】以 O3'-P 骨架真實鍵長動態切開 DNA，絕不端點相連
+     * 動態解析結構：以骨架原子精準切斷兩股，並記錄骨架錨點使梯竿完整穿透彩帶
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -383,18 +378,32 @@
 
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
-          let o3 = null, p = null, c1 = null;
+          let o3 = null, p = null, anchorAtom = null;
           r.eachAtom(a => {
             const aname = a.atomname.trim();
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
             if (aname === "P") p = { x: a.x, y: a.y, z: a.z };
-            if (aname === "C1'" || aname === "C1*") c1 = { x: a.x, y: a.y, z: a.z, index: a.index };
+
+            // 骨架錨點：首選 P 原子，若為 5' 末端無 P 則以 O5' 或 C5' 作為骨架端點
+            if (aname === "P") {
+              anchorAtom = { x: a.x, y: a.y, z: a.z, index: a.index };
+            } else if (!anchorAtom && (aname === "O5'" || aname === "O5*" || aname === "C5'" || aname === "C5*")) {
+              anchorAtom = { x: a.x, y: a.y, z: a.z, index: a.index };
+            }
           });
+
+          // 若皆無特定骨架原子，則以殘基第一個原子保底
+          if (!anchorAtom) {
+            r.eachAtom(a => {
+              if (!anchorAtom) anchorAtom = { x: a.x, y: a.y, z: a.z, index: a.index };
+            });
+          }
+
           nucleicResList.push({
             resno: r.resno,
             chain: (r.chainname || 'A').trim(),
             resname: rname,
-            o3: o3, p: p, c1: c1
+            o3: o3, p: p, anchor: anchorAtom
           });
         }
       });
@@ -407,7 +416,7 @@
         return;
       }
 
-      // 依據前後殘基 O3' 到 P 的距離切斷股 (正常同一股距離約 1.6 Å，兩股斷點處距離 > 3.0 Å)
+      // 依據前後殘基 O3' 到 P 的距離切斷股
       const strandGroups = [];
       let curGroup = [nucleicResList[0]];
 
@@ -423,7 +432,6 @@
           dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        // 若骨架不連續或跳號，強制切斷成新的一股
         if (dist > 3.0 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
           strandGroups.push(curGroup);
           curGroup = [r2];
@@ -433,24 +441,24 @@
       }
       if (curGroup.length > 0) strandGroups.push(curGroup);
 
-      // 產生各股獨立的 Cartoon 選取字串 (保證 100% 分開)
+      // 分股選取字串
       appState.dnaStrandSelections = strandGroups.map(grp => {
         const minR = grp[0].resno;
         const maxR = grp[grp.length - 1].resno;
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // 產生梯竿 (Ladder Rungs)：正反兩股對應的 C1' 原子對配對
+      // 梯竿錨點配對 (以骨架錨點進行 Watson-Crick 配對連線，完全貫穿至彩帶邊緣)
       const ladderPairs = [];
       if (strandGroups.length >= 2) {
         const g1 = strandGroups[0];
         const g2 = strandGroups[1];
         const len = Math.min(g1.length, g2.length);
         for (let i = 0; i < len; i++) {
-          const c1_A = g1[i].c1;
-          const c1_B = g2[len - 1 - i].c1;
-          if (c1_A && c1_B) {
-            ladderPairs.push([`@${c1_A.index}`, `@${c1_B.index}`]);
+          const b1 = g1[i].anchor;
+          const b2 = g2[len - 1 - i].anchor;
+          if (b1 && b2) {
+            ladderPairs.push([`@${b1.index}`, `@${b2.index}`]);
           }
         }
       }
@@ -497,16 +505,18 @@
     }
 
     /**
-     * 重建所有 Representation (乾淨單根梯竿 + 無端點相連)
+     * 重建所有 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
+
+      // 清理舊的自訂幾何形狀
       if (appState.ladderShapeComp) {
-      appState.stage.removeComponent(appState.ladderShapeComp);
-      appState.ladderShapeComp = null;
+        appState.stage.removeComponent(appState.ladderShapeComp);
+        appState.ladderShapeComp = null;
       }
-        
+
       const pRep = appState.protStyle;
       const pColorParams = getColorParams(appState.protColor);
 
@@ -556,28 +566,27 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (修正：完全不用 distance，改用乾淨的字串或自訂渲染，絕不報錯)
+      // 3. DNA 階梯橫竿 (實心橫圓柱 + 全面相容 5'/3' 末端修飾之鹼基配色)
       if (dRep === 'vmd_ladder') {
-        // 先確保移除舊的自訂元件
-        if (appState.ladderShapeComp) {
-          appState.stage.removeComponent(appState.ladderShapeComp);
-          appState.ladderShapeComp = null;
-        }
-
         if (appState.ladderPairs && appState.ladderPairs.length > 0) {
           const shape = new NGL.Shape("dna_ladder_cylinders");
           const structure = appState.component.structure;
 
-          // 鹼基專屬配色盤 (DA/A: 紅, DT/T: 綠, DC/C: 藍, DG/G: 黃)
-          const baseColors = {
-            'DA': [0.95, 0.25, 0.25], 'A': [0.95, 0.25, 0.25],
-            'DT': [0.25, 0.85, 0.35], 'T': [0.25, 0.85, 0.35],
-            'DC': [0.25, 0.50, 0.95], 'C': [0.25, 0.50, 0.95],
-            'DG': [0.95, 0.80, 0.15], 'G': [0.95, 0.80, 0.15],
-            'DEFAULT': [0.8, 0.84, 0.89]
+          // 核心鹼基專屬配色盤 (RGB 比例)
+          const baseColorPalette = {
+            'A': [0.95, 0.25, 0.25], // 紅色
+            'T': [0.25, 0.85, 0.35], // 綠色
+            'C': [0.25, 0.50, 0.95], // 藍色
+            'G': [0.95, 0.80, 0.15], // 黃色
+            'U': [0.85, 0.25, 0.85]  // 桃紅
           };
 
-          const getC = (rname) => baseColors[(rname || '').trim().toUpperCase()] || baseColors['DEFAULT'];
+          // 鹼基名稱正規化：過濾 DA, DA5, DA3, DT, DC, DG 等末端命名差異
+          const parseBaseColor = (rname) => {
+            const raw = (rname || '').trim().toUpperCase();
+            const clean = raw.replace(/^D/, '').replace(/[35]$/, '');
+            return baseColorPalette[clean] || [0.8, 0.84, 0.89];
+          };
 
           appState.ladderPairs.forEach(pair => {
             const idx1 = parseInt(pair[0].replace('@', ''), 10);
@@ -586,13 +595,13 @@
             const a2 = structure.getAtomProxy(idx2);
 
             if (a1 && a2) {
-              const c1 = getC(a1.resname);
-              const c2 = getC(a2.resname);
+              const c1 = parseBaseColor(a1.resname);
+              const c2 = parseBaseColor(a2.resname);
               const mx = (a1.x + a2.x) / 2;
               const my = (a1.y + a2.y) / 2;
               const mz = (a1.z + a2.z) / 2;
 
-              // 畫前半段與後半段實心圓柱，各自帶有鹼基顏色
+              // 實心橫柱前後各半對稱著色，直通骨架核心
               shape.addCylinder([a1.x, a1.y, a1.z], [mx, my, mz], c1, 0.22);
               shape.addCylinder([mx, my, mz], [a2.x, a2.y, a2.z], c2, 0.22);
             }
@@ -601,20 +610,13 @@
           appState.ladderShapeComp = appState.stage.addComponentFromObject(shape);
           appState.ladderShapeComp.addRepresentation("buffer");
         }
-      } else {
-        if (appState.ladderShapeComp) {
-          appState.stage.removeComponent(appState.ladderShapeComp);
-          appState.ladderShapeComp = null;
-        }
-
-        if (dRep === 'licorice') {
-          appState.component.addRepresentation('licorice', {
-            sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
-            ...dColorParams,
-            radius: 0.22,
-            multipleBond: 'off'
-          });
-        }
+      } else if (dRep === 'licorice') {
+        appState.component.addRepresentation('licorice', {
+          sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
+          ...dColorParams,
+          radius: 0.22,
+          multipleBond: 'off'
+        });
       }
 
       // 4. 鋅離子 (ZN)
@@ -643,7 +645,7 @@
         });
       }
 
-      // 6. 結合區特寫模式：只針對接觸側鏈與接觸鹼基加上 Licorice
+      // 6. 結合區特寫模式
       if (appState.isFocusingInterface) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
@@ -665,9 +667,6 @@
       }
     }
 
-    /**
-     * 一鍵結合區特寫開關
-     */
     function toggleFocusInterface() {
       if (!appState.component) return;
       appState.isFocusingInterface = !appState.isFocusingInterface;
@@ -706,6 +705,11 @@
       dom.slider.value = f;
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
+
+      // 動畫切換影格時同步更新實心橫柱座標
+      if (appState.dnaStyle === 'vmd_ladder') {
+        applyAllRepresentations();
+      }
     }
 
     function stepFrame(step) {
@@ -774,7 +778,7 @@
     }
 
     /**
-     * 載入 PDB 檔案 (帶防頻繁重整鎖定機制)
+     * 載入 PDB 檔案
      */
     async function loadPdbFile(url) {
       if (appState.isLoadingFile) return;
@@ -794,9 +798,13 @@
         });
         appState.component = comp;
 
-        analyzeStructureDynamically(comp.structure);
+        try {
+          analyzeStructureDynamically(comp.structure);
+          applyAllRepresentations();
+        } catch (repError) {
+          console.error('樣式建立警告:', repError);
+        }
 
-        applyAllRepresentations();
         comp.autoView(500);
 
         const trajComp = comp.addTrajectory();
@@ -828,15 +836,14 @@
         const initCount = trajectory.frameCount || 1;
         evaluateTrajectory(initCount);
 
-        hideLoading();
       } catch (err) {
         console.error('PDB 載入失敗:', err);
-        hideLoading();
         dom.loadingText.textContent = '載入失敗: ' + url;
         dom.loadingSubtext.textContent = '請檢查檔案是否存在且可讀取';
         dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
         setTimeout(hideLoading, 3000);
       } finally {
+        hideLoading();
         appState.isLoadingFile = false;
       }
     }
@@ -847,7 +854,6 @@
       });
 
       dom.btnRefreshFiles.addEventListener('click', scanFolderFiles);
-
       dom.btnPlay.addEventListener('click', togglePlay);
 
       dom.btnPrevFrame.addEventListener('click', () => {
