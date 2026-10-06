@@ -511,7 +511,7 @@
     }
 
     /**
-     * 重建所有 Representation (徹底清除所有雜枝 Licorice，還原純淨 VMD NewCartoon Ladder)
+     * 重建所有 Representation (徹底解決顏色重疊、還原正統 VMD Ladder 橫竿)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -523,8 +523,8 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體 (純骨架，絕對不畫任何側鏈)
-      const protSele = 'protein and not hydrogen and not resname ZN';
+      // 1. 蛋白質主體：嚴格只選 protein，不選鋅離子，不疊加任何多餘圖層
+      const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
@@ -550,12 +550,12 @@
         });
       }
 
-      // 2. DNA 雙螺旋絲帶 (正反兩股分開畫，永不閉環)
+      // 2. DNA 雙螺旋骨架絲帶：分股獨立繪製 (嚴格限定 not protein，杜絕在蛋白上疊加 DNA 色帶)
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
             appState.component.addRepresentation('cartoon', {
-              sele: strandSele,
+              sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
               aspectRatio: 2.8,
               scale: 0.85,
@@ -566,30 +566,32 @@
         });
       }
 
-    // 3. DNA 階梯橫竿 (還原乾淨的 VMD Ladder 鹼基，徹底過濾氫原子刺)
+      // 3. DNA 階梯橫竿 (VMD Ladder 官方標準算法：base 模式)
       if (dRep === 'vmd_ladder') {
-        // 嚴格過濾氫原子 (not hydrogen) 與骨架 (not backbone)
-        // 這樣只會留下純淨的鹼基環棒，且緊密相連骨架，中間絕不空心
-        appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and not backbone and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
-          ...dColorParams,
-          radius: 0.20,
-          multipleBond: 'off'
+        // 嚴格過濾氫原子與蛋白質，只對核酸主體繪製一根根實心梯竿 (無白球、骨架與鹼基無縫相連)
+        appState.component.addRepresentation('base', {
+          sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
+          ...dColorParams
         });
       } else if (dRep === 'licorice') {
-        // 全 Licorice 模式 (整條 DNA 包含主鏈骨架都畫棒狀)
         appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
+          sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 4. 鋅離子 (ZN)：單一顆金屬球常駐
+      // 4. 鋅離子 (ZN)：常駐獨立金屬球
       if (appState.zincAtomIndex >= 0) {
         appState.component.addRepresentation('spacefill', {
           sele: `@${appState.zincAtomIndex}`,
+          color: '#94a3b8',
+          scale: 0.65
+        });
+      } else {
+        appState.component.addRepresentation('spacefill', {
+          sele: '_ZN or :ZN or [ZN] or zinc',
           color: '#94a3b8',
           scale: 0.65
         });
@@ -598,7 +600,7 @@
       // 5. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
-          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .C1*)',
+          sele: 'nucleic and not protein and not hydrogen and (.C1\' or .C1*)',
           labelType: 'resname',
           color: '#f8fafc',
           scale: 1.2,
@@ -606,7 +608,7 @@
         });
       }
 
-      // 6. 結合區特寫模式：【只有在按下特寫按鈕時】才高亮局部接觸原子
+      // 6. 結合區特寫模式：只針對計算出的接觸原子加上 Licorice
       if (appState.isFocusingInterface) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
