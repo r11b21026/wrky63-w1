@@ -298,7 +298,7 @@
     }
 
     /**
-     * 自動偵測可讀取的 PDB 檔案 (防重整卡死與非同步鎖定)
+     * 自動讀取 PDB 檔案清單 (由 GitHub Actions 自動生成，無 60 次 API 限制)
      */
     async function scanFolderFiles() {
       if (appState.isLoadingFile) return;
@@ -311,39 +311,20 @@
         return;
       }
 
-      showLoading('掃描 PDB 檔案中...', '請稍候');
+      showLoading('載入 PDB 檔案清單中...', '請稍候');
       let found = [];
 
-      const hostname = window.location.hostname;
-      const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
-      const isGitHubPages = hostname.endsWith('github.io');
-
-      if (isGitHubPages && pathname) {
-        const owner = hostname.split('.')[0];
-        const repo = pathname.split('/')[0];
-        try {
-          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`);
-          if (res.ok) {
-            const data = await res.json();
-            found = data
-              .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
-              .map(item => ({ name: item.name, url: item.name }));
-          }
-        } catch (e) {}
-      }
-
-      if (found.length === 0) {
-        // 常見候選清單
-        const candidates = ['complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
-        const checks = candidates.map(async (filename) => {
-          try {
-            const r = await fetch(filename, { method: 'HEAD', cache: 'no-cache' });
-            if (r.ok) return { name: filename, url: filename };
-          } catch (e) {}
-          return null;
-        });
-        const resList = await Promise.all(checks);
-        found = resList.filter(Boolean);
+      try {
+        // 直接讀取 GitHub Actions 自動生成的 pdb_list.json
+        const res = await fetch(`./pdb_list.json?t=${Date.now()}`);
+        if (res.ok) {
+          const fileList = await res.json();
+          found = fileList.map(name => ({ name: name, url: `./${name}` }));
+        } else {
+          console.warn('尚未找到 pdb_list.json，請確認 Actions 是否已成功部署。');
+        }
+      } catch (e) {
+        console.error('載入 pdb_list.json 失敗:', e);
       }
 
       dom.fileSelector.innerHTML = '';
@@ -357,7 +338,7 @@
         hideLoading();
         loadPdbFile(found[0].url);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到檔案 (可在網址加上 ?file=檔名.pdb)</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到任何 .pdb 檔案</option>';
         hideLoading();
       }
     }
