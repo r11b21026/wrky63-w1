@@ -502,9 +502,6 @@
     function applyAllRepresentations() {
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
-      if (appState.ladderShapeComp) {
-      appState.stage.removeComponent(appState.ladderShapeComp);
-      appState.ladderShapeComp = null;
 
       const pRep = appState.protStyle;
       const pColorParams = getColorParams(appState.protColor);
@@ -555,63 +552,24 @@
         });
       }
 
-      // 3. DNA 階梯橫竿：基於鹼基配色的實心橫柱 (VMD Ladder Rung)
+      // 3. DNA 階梯橫竿 (真正的 VMD Ladder Rung：純淨實心橫柱，絕不畫出疊在一起的雜環)
       if (dRep === 'vmd_ladder') {
         if (appState.ladderPairs && appState.ladderPairs.length > 0) {
-          // 移除可能殘留的舊 shape
-          if (appState.ladderShapeComp) {
-            appState.stage.removeComponent(appState.ladderShapeComp);
-            appState.ladderShapeComp = null;
-          }
-
-          const shape = new NGL.Shape("dna_ladder_cylinders");
-          const structure = appState.component.structure;
-
-          // 鹼基專屬配色盤 (可依需求微調顏色)
-          const baseColorMap = {
-            'DA': [0.95, 0.25, 0.25], // A: 紅
-            'A':  [0.95, 0.25, 0.25],
-            'DT': [0.25, 0.85, 0.35], // T: 綠
-            'T':  [0.25, 0.85, 0.35],
-            'DC': [0.25, 0.50, 0.95], // C: 藍
-            'C':  [0.25, 0.50, 0.95],
-            'DG': [0.95, 0.80, 0.15], // G: 黃
-            'G':  [0.95, 0.80, 0.15],
-            'DEFAULT': [0.8, 0.84, 0.89]
-          };
-
-          const getColor = (rname) => baseColorMap[(rname || '').trim().toUpperCase()] || baseColorMap['DEFAULT'];
-
-          appState.ladderPairs.forEach(pair => {
-            const idx1 = parseInt(pair[0].replace('@', ''), 10);
-            const idx2 = parseInt(pair[1].replace('@', ''), 10);
-            const a1 = structure.getAtomProxy(idx1);
-            const a2 = structure.getAtomProxy(idx2);
-
-            if (a1 && a2) {
-              const c1 = getColor(a1.resname);
-              const c2 = getColor(a2.resname);
-              // 中點座標 (形成雙色柱)
-              const mx = (a1.x + a2.x) / 2;
-              const my = (a1.y + a2.y) / 2;
-              const mz = (a1.z + a2.z) / 2;
-
-              // 實心橫柱 A 半段
-              shape.addCylinder([a1.x, a1.y, a1.z], [mx, my, mz], c1, 0.22);
-              // 實心橫柱 B 半段
-              shape.addCylinder([mx, my, mz], [a2.x, a2.y, a2.z], c2, 0.22);
-            }
+          appState.component.addRepresentation('distance', {
+            sele: appState.ladderPairs,
+            color: '#cbd5e1',
+            radius: 0.22,
+            labelVisible: false
           });
-
-          appState.ladderShapeComp = appState.stage.addComponentFromObject(shape);
-          appState.ladderShapeComp.addRepresentation("buffer");
         }
-      } else {
-        // 使用者切換成其他模式時清除柱子
-        if (appState.ladderShapeComp) {
-          appState.stage.removeComponent(appState.ladderShapeComp);
-          appState.ladderShapeComp = null;
-        }
+      } else if (dRep === 'licorice') {
+        // 使用者主動選 Licorice 才顯示所有原子鍵
+        appState.component.addRepresentation('licorice', {
+          sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
+          ...dColorParams,
+          radius: 0.22,
+          multipleBond: 'off'
+        });
       }
 
       // 4. 鋅離子 (ZN)
