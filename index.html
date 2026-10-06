@@ -364,46 +364,66 @@
     }
 
     /**
-     * 偵測結構中所有 DNA 殘基並分割成正反兩股 (避免端點假性閉環，改用標準 resno 關鍵字)
+     * 專門適配 MDTraj/Amber PDB 的 DNA 正反股切分算法
+     * 徹底解決 93(DA3) 與 94(DT5) 甚至 CONECT 所造成的骨架黏合假象
      */
     function detectDnaStrands(structure) {
-      const nucleicChains = new Set();
-      const resList = [];
+      const nucleicRes = [];
 
       structure.eachResidue(r => {
-        if (r.isNucleic()) {
-          resList.push(r.resno);
-          if (r.chainname) nucleicChains.add(r.chainname.trim());
+        // NGL 內部對 Amber 的 DG5, DA3, DT5 等有時未完全標註 isNucleic，做雙重驗證
+        const rname = (r.resname || '').trim().toUpperCase();
+        const isAmberDna = /^(D[ATCG][35]?|[ATCG][35]?|DA|DT|DC|DG)$/.test(rname);
+        if (r.isNucleic() || isAmberDna) {
+          nucleicRes.push({
+            resno: r.resno,
+            resname: rname,
+            chain: r.chainname ? r.chainname.trim() : ''
+          });
         }
       });
 
-      if (resList.length === 0) return ['nucleic'];
+      if (nucleicRes.length === 0) return ['nucleic'];
 
-      // 如果有明確的多條鏈代號 (例如 C 和 D 鏈)
-      const validChains = Array.from(nucleicChains).filter(c => c.length > 0);
-      if (validChains.length >= 2) {
-        return validChains.map(chain => `nucleic and :${chain}`);
+      // 1. 如果 PDB 原生就有不同 chain 代號
+      const chains = Array.from(new Set(nucleicRes.map(n => n.chain))).filter(Boolean);
+      if (chains.length >= 2) {
+        return chains.map(c => `nucleic and :${c}`);
       }
 
-      // 若在同一條鏈或無鏈名，以 resno 斷點分割
-      const uniqueResnos = Array.from(new Set(resList)).sort((a, b) => a - b);
-      let splitResno = -1;
-      for (let i = 0; i < uniqueResnos.length - 1; i++) {
-        if (uniqueResnos[i+1] - uniqueResnos[i] > 1) {
-          splitResno = uniqueResnos[i];
+      // 2. 依 Amber 3' 端殘基名稱切分 (如 DA3, DT3, DC3, DG3)
+      const resnos = Array.from(new Set(nucleicRes.map(n => n.resno))).sort((a,b) => a - b);
+      let splitPoint = -1;
+
+      for (let i = 0; i < nucleicRes.length; i++) {
+        const item = nucleicRes[i];
+        if (item.resname.endsWith('3') && i < nucleicRes.length - 1) {
+          splitPoint = item.resno;
           break;
         }
       }
 
-      if (splitResno === -1 && uniqueResnos.length >= 2) {
-        const midIdx = Math.floor(uniqueResnos.length / 2) - 1;
-        splitResno = uniqueResnos[midIdx];
+      // 3. 依 5' 端殘基名稱判定第二股開頭 (如 DT5, DG5)
+      if (splitPoint === -1) {
+        for (let i = 1; i < nucleicRes.length; i++) {
+          const item = nucleicRes[i];
+          if (item.resname.endsWith('5')) {
+            splitPoint = nucleicRes[i - 1].resno;
+            break;
+          }
+        }
       }
 
-      if (splitResno !== -1) {
+      // 4. 若以上皆無，取殘基編號中間值強制切成兩股獨立絲帶
+      if (splitPoint === -1 && resnos.length >= 2) {
+        const midIdx = Math.floor(resnos.length / 2) - 1;
+        splitPoint = resnos[midIdx];
+      }
+
+      if (splitPoint !== -1) {
         return [
-          `nucleic and resno <= ${splitResno}`,
-          `nucleic and resno > ${splitResno}`
+          `nucleic and resno <= ${splitPoint}`,
+          `nucleic and resno > ${splitPoint}`
         ];
       }
 
@@ -423,7 +443,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 特寫時背景骨架保持微透，維持空間定位
+      // 特寫時背景骨架保持微透 (0.35)，維持整體結構輪廓
       const bgOpacity = appState.isFocusingInterface ? 0.35 : 1.0;
 
       // 1. 蛋白質主體
@@ -462,7 +482,7 @@
         });
       }
 
-      // 2. DNA 渲染：各股骨架獨立繪製
+      // 2. DNA 渲染：正反兩股各自獨立 Cartoon，徹底消除相連問題
       const strands = appState.dnaStrands.length > 0 ? appState.dnaStrands : ['nucleic'];
 
       strands.forEach(strandSele => {
@@ -479,7 +499,7 @@
         }
       });
 
-      // 鹼基竿子 (Ladder Blocks) 或 Licorice
+      // 鹼基竿子 (Ladder Blocks)
       if (dRep === 'vmd_ladder') {
         appState.component.addRepresentation('base', {
           sele: 'nucleic',
@@ -496,9 +516,9 @@
         });
       }
 
-      // 3. 鋅離子 (ZN)：精緻小金屬球
+      // 3. 鋅離子 (ZN)：金屬球
       appState.component.addRepresentation('spacefill', {
-        sele: '_ZN or :ZN or :ZN2 or [ZN] or [ZN2] or zinc',
+        sele: '_ZN or :ZN or :ZN2 or [ZN] or [ZN2] or zinc or @1302',
         color: '#94a3b8',
         scale: 0.65
       });
@@ -506,7 +526,7 @@
       // 4. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
-          sele: 'nucleic and .C1\'',
+          sele: 'nucleic and (.C1\' or .C1*)',
           labelType: 'resname',
           color: '#f8fafc',
           scale: 1.2,
@@ -514,37 +534,40 @@
         });
       }
 
-      // 5. 結合區特寫模式：只針對真正交互作用的局部側鏈與鹼基轉為 Licorice
+      // 5. 結合區特寫模式：只繪製真正有極性接觸的局部側鏈與鹼基
       if (appState.isFocusingInterface) {
-        // 蛋白質端：僅挑選距離 DNA 4.0 Å 以內的側鏈 (排除骨架 C, CA, N, O，保持 cartoon 乾淨)
+        // (A) 蛋白質側鏈：只高亮距離 DNA 3.2 Å 以內的關鍵極性帶電殘基 (Arg, Lys, His, Asp, Glu, Tyr, Ser, Thr)
+        // 且嚴格限定 sidechain and not backbone，避免把整個蛋白變成 Licorice
+        const contactSidechains = 'protein and (ARG or LYS or HIS or ASP or GLU or TYR or SER or THR) and (sidechain and not backbone) and within 3.2 of nucleic';
         appState.component.addRepresentation('licorice', {
-          sele: 'protein and (sidechain and not backbone) and within 4.0 of nucleic',
+          sele: contactSidechains,
           colorScheme: 'element',
           radius: 0.22,
           multipleBond: 'off'
         });
 
-        // DNA 端：僅挑選距離蛋白質 4.0 Å 以內的鹼基原子 (排除骨架磷酸糖核酸骨架，骨架由 Cartoon 表現)
+        // (B) DNA 局部鹼基：只高亮距離蛋白質 3.2 Å 以內且非 backbone 的原子
+        const contactBases = 'nucleic and not backbone and within 3.2 of protein';
         appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and not backbone and within 4.0 of protein',
+          sele: contactBases,
           colorScheme: 'element',
           radius: 0.22,
           multipleBond: 'off'
         });
 
-        // 跨分子極性作用虛線
+        // (C) 跨分子極性作用虛線 (氫鍵與鹽橋)
         appState.component.addRepresentation('contact', {
           sele: 'protein',
           filterSele: 'nucleic',
           contactType: 'polar',
-          maxDistance: 3.6,
+          maxDistance: 3.5,
           color: '#38bdf8'
         });
       }
     }
 
     /**
-     * 一鍵結合區特寫
+     * 一鍵結合區特寫與視角移動
      */
     function toggleFocusInterface() {
       if (!appState.component) return;
@@ -553,8 +576,9 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        const interfaceSele = '(protein and within 4.0 of nucleic) or (nucleic and within 4.0 of protein)';
-        appState.component.autoView(interfaceSele, 800);
+        // 視角對焦到介面接觸區核心 (Arg, Lys 等結合核心)
+        const pocketSele = '(protein and within 3.5 of nucleic) and not (resno < 10 or resno > 75)';
+        appState.component.autoView(pocketSele || 'nucleic', 800);
 
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
@@ -669,6 +693,7 @@
         });
         appState.component = comp;
 
+        // 偵測正反兩股邊界 (切開 93 與 94)
         appState.dnaStrands = detectDnaStrands(comp.structure);
 
         applyAllRepresentations();
