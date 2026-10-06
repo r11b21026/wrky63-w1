@@ -87,7 +87,7 @@
     <div class="flex items-center space-x-2 pointer-events-auto">
       
       <!-- 一鍵結合口袋特寫按鈕 -->
-      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (局部極性作用 + 適度放大)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -186,8 +186,8 @@
     </div>
   </div>
 
-  <!-- 底部播放控制器 -->
-  <footer class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
+  <!-- 底部播放控制器 (靜態結構時會完全自動隱藏) -->
+  <footer id="bottom-timeline" class="hidden absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex-col items-center">
     <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
       
       <!-- 軌跡拉桿 -->
@@ -267,6 +267,7 @@
       loadingSubtext: document.getElementById('loading-subtext'),
       fileSelector: document.getElementById('file-selector'),
       btnRefreshFiles: document.getElementById('btn-refresh-files'),
+      bottomTimeline: document.getElementById('bottom-timeline'),
       slider: document.getElementById('trajectory-slider'),
       sliderCurr: document.getElementById('slider-curr-frame'),
       sliderTotal: document.getElementById('slider-total-frame'),
@@ -373,10 +374,8 @@
 
       if (resList.length === 0) return ['nucleic'];
 
-      // 去除重複並排序
       const uniqueResnos = Array.from(new Set(resList)).sort((a,b) => a - b);
       
-      // 找出跳號分界點 (例如鏈別斷裂點)
       let splitResno = -1;
       for (let i = 0; i < uniqueResnos.length - 1; i++) {
         if (uniqueResnos[i+1] - uniqueResnos[i] > 1) {
@@ -385,7 +384,6 @@
         }
       }
 
-      // 若編號完全連續 (如 1 到 40)，取正中間為正反股分界
       if (splitResno === -1 && uniqueResnos.length >= 2) {
         const midIdx = Math.floor(uniqueResnos.length / 2) - 1;
         splitResno = uniqueResnos[midIdx];
@@ -414,7 +412,6 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 特寫模式下主體大幅淡化
       const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
 
       // 1. 蛋白質主體
@@ -453,12 +450,11 @@
         });
       }
 
-      // 2. DNA 渲染：★ 正反股獨立繪製，修復 Backbone 消失與端點閉合 ★
+      // 2. DNA 渲染：正反股獨立繪製
       const strands = appState.dnaStrands.length > 0 ? appState.dnaStrands : ['nucleic'];
 
       strands.forEach(strandSele => {
         if (dRep === 'vmd_ladder') {
-          // 正反股各自繪製 Cartoon 骨架 (注意：不加 and backbone，完整顯現)
           appState.component.addRepresentation('cartoon', {
             sele: strandSele,
             ...dColorParams,
@@ -515,25 +511,25 @@
         });
       }
 
-      // 5. 結合區特寫模式：★ 乾淨極簡，只顯示跨分子極性接觸，杜絕整片 Licorice ★
+      // 5. 結合區特寫模式：只畫跨分子極性接觸（不全體變 Licorice）
       if (appState.isFocusingInterface) {
-        // (A) 只高亮真正接觸口袋內的蛋白質側鏈極性頭部 (極少數幾根棒子)
+        // 只高亮與 DNA 形成緊密接觸（小於 3.2 Å）的蛋白質極性側鏈
         appState.component.addRepresentation('licorice', {
-          sele: 'protein and within 3.0 of nucleic and (sidechain or not backbone)',
+          sele: 'protein and within 3.2 of nucleic and sidechain',
           colorScheme: 'element',
           radius: 0.22,
           multipleBond: 'off'
         });
 
-        // (B) 只高亮接觸的 DNA 鹼基環
+        // 接觸之 DNA 鹼基
         appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and within 3.0 of protein and not backbone',
+          sele: 'nucleic and within 3.2 of protein and not backbone',
           colorScheme: 'element',
           radius: 0.22,
           multipleBond: 'off'
         });
 
-        // (C) 跨分子極性氫鍵虛線
+        // 跨分子極性氫鍵虛線
         appState.component.addRepresentation('contact', {
           sele: 'protein',
           filterSele: 'nucleic',
@@ -545,7 +541,7 @@
     }
 
     /**
-     * 一鍵結合區特寫：適度放大，視野舒適
+     * 一鍵結合區特寫
      */
     function toggleFocusInterface() {
       if (!appState.component) return;
@@ -554,14 +550,12 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        // 以接觸區為中心進行 autoView 平滑運鏡
         const interfaceSele = '(protein and within 3.5 of nucleic) or (nucleic and within 3.5 of protein)';
         appState.component.autoView(interfaceSele, 800);
 
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
       } else {
-        // 重設整體視野
         appState.component.autoView(600);
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '結合區特寫';
@@ -659,12 +653,16 @@
     }
 
     /**
-     * 載入 PDB 檔案
+     * 載入 PDB 檔案 (判定動態 vs 靜態)
      */
     async function loadPdbFile(urlOrFile) {
       stopPlayback();
       const displayName = typeof urlOrFile === 'string' ? urlOrFile : urlOrFile.name;
-      showLoading('正在讀取結構軌跡...', displayName);
+      showLoading('正在讀取結構...', displayName);
+
+      // 每次載入前先重設並隱藏時間軸
+      dom.bottomTimeline.classList.add('hidden');
+      dom.bottomTimeline.classList.remove('flex');
 
       try {
         appState.stage.removeAllComponents();
@@ -675,32 +673,46 @@
         });
         appState.component = comp;
 
-        // 偵測正反股分界
+        // 偵測 DNA 正反股邊界
         appState.dnaStrands = detectDnaStrands(comp.structure);
 
         applyAllRepresentations();
         comp.autoView(500);
 
+        // 掛載軌跡組件
         const trajComp = comp.addTrajectory();
         const trajectory = trajComp.trajectory;
         appState.trajectory = trajectory;
 
+        // 關鍵判定函式：依影格數決定是否開啟時間軸
+        function evaluateTrajectory(count) {
+          if (count > 1) {
+            // 動態 PDB：開啟時間軸並開始播放
+            appState.totalFrames = count;
+            dom.slider.max = count - 1;
+            dom.sliderTotal.textContent = String(count - 1);
+            dom.bottomTimeline.classList.remove('hidden');
+            dom.bottomTimeline.classList.add('flex');
+            setFrame(0);
+            startPlayback();
+          } else {
+            // 靜態 PDB：徹底隱藏時間軸，不顯示拉桿
+            appState.totalFrames = 1;
+            appState.trajectory = null;
+            dom.bottomTimeline.classList.add('hidden');
+            dom.bottomTimeline.classList.remove('flex');
+            stopPlayback();
+          }
+        }
+
+        // 監聽影格數變更
         trajectory.signals.countChanged.add(function (count) {
-          appState.totalFrames = count;
-          dom.slider.max = count - 1;
-          dom.sliderTotal.textContent = String(count - 1);
-          setFrame(0);
-          if (count > 1) startPlayback();
+          evaluateTrajectory(count);
         });
 
+        // 立即評估當前已載入的影格數
         const initCount = trajectory.frameCount || 1;
-        if (initCount > 1) {
-          appState.totalFrames = initCount;
-          dom.slider.max = initCount - 1;
-          dom.sliderTotal.textContent = String(initCount - 1);
-          setFrame(0);
-          startPlayback();
-        }
+        evaluateTrajectory(initCount);
 
         hideLoading();
       } catch (err) {
