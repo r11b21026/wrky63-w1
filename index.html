@@ -566,35 +566,19 @@
         }
       });
 
-      // 3. DNA 鹼基階梯棒 (Ladder Rungs)
+      // 3. DNA 鹼基桿 (Ladder Blocks)：用細 Licorice 呈現，絕不使用會冒出大白球的 base 表示法
       if (dRep === 'vmd_ladder') {
-        // (A) 繪製鹼基平面簡約橫竿：從 C1' 往鹼基環心延伸的純棒狀 (排除環內詳細化學鍵與氫)
-        // 抓取糖苷鍵 C1' 至 N9 (嘌呤) / N1 (嘧啶) 及環心關鍵原子，並賦予專屬色
-        const ladderRungSele = 'not protein and not resname ZN and not hydrogen and (.C1\' or .N9 or .N1 or .C4 or .C6)';
-        appState.component.addRepresentation('tube', {
-          sele: ladderRungSele,
-          ...dColorParams,
-          radius: 0.22,
-          subdiv: 6
-        });
-
-        // (B) 在互補配對鹼基中心以橫桿連接兩側雙螺旋 (VMD Rung 效果)
-        // 使用 distance 渲染引擎繪製乾淨無球體的跨鏈圓柱棒
-        appState.component.addRepresentation('distance', {
-          sele: [
-            ['.N1 and (resname DA or resname DA3 or resname DA5 or resname A)', '.N3 and (resname DT or resname DT3 or resname DT5 or resname T)'],
-            ['.N1 and (resname DG or resname DG3 or resname DG5 or resname G)', '.N3 and (resname DC or resname DC3 or resname DC5 or resname C)']
-          ],
-          color: '#cbd5e1',
-          radius: 0.18,
-          labelUnit: 'none',   // 隱藏距離數值標籤，純作階梯圓棒
-          labelVisible: false
-        });
-
+        if (appState.dnaBaseSelection && appState.dnaBaseSelection !== 'none') {
+          appState.component.addRepresentation('licorice', {
+            sele: appState.dnaBaseSelection,
+            ...dColorParams,
+            radius: 0.18,
+            multipleBond: 'off'
+          });
+        }
       } else if (dRep === 'licorice') {
-        // 若使用者主動切換成 Licorice，才顯示全化學鍵結構 (依舊排除氫原子)
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not resname ZN and not hydrogen',
+          sele: 'not protein and not hydrogen',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
