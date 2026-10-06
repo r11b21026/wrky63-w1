@@ -75,7 +75,7 @@
       <div class="flex items-center space-x-1.5">
         <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400"></i>
         <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[160px] sm:max-w-[240px] truncate cursor-pointer hover:bg-slate-800 transition">
-          <option value="" disabled selected>偵測檔案中...</option>
+          <option value="" disabled selected>搜尋 PDB 檔案中...</option>
         </select>
         <button id="btn-refresh-files" title="重新掃描目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -151,7 +151,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基棒 (Ladder)</option>
+            <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基梯竿 (Ladder)</option>
             <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
             <option value="licorice">Licorice 全棒狀模型</option>
           </select>
@@ -244,7 +244,6 @@
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
-      dnaBaseSelection: '',
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
@@ -296,11 +295,16 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    /**
-     * 自動偵測目錄中的 PDB 檔案 (無固定寫死列表)
-     */
     async function scanFolderFiles() {
-      showLoading('掃描目錄 PDB 結構中...', '請稍候');
+      const urlParams = new URLSearchParams(window.location.search);
+      const specifiedFile = urlParams.get('file') || urlParams.get('pdb');
+      if (specifiedFile) {
+        dom.fileSelector.innerHTML = `<option value="${specifiedFile}">${specifiedFile}</option>`;
+        loadPdbFile(specifiedFile);
+        return;
+      }
+
+      showLoading('掃描 PDB 檔案中...', '請稍候');
       let found = [];
 
       const hostname = window.location.hostname;
@@ -321,18 +325,8 @@
         } catch (e) {}
       }
 
-      // 若非 GitHub 或未掃描到，自當前目錄探測常見檔案
       if (found.length === 0) {
-        const currentPath = window.location.pathname;
-        const currentFile = currentPath.substring(currentPath.lastIndexOf('/') + 1);
-        const candidates = [];
-        if (currentFile.endsWith('.pdb')) candidates.push(currentFile);
-        
-        // 嘗試常見檔名作為預設 fallback
-        ['complex.pdb', 'trajectory.pdb', 'traj.pdb', 'model.pdb'].forEach(c => {
-          if (!candidates.includes(c)) candidates.push(c);
-        });
-
+        const candidates = ['complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
         const checks = candidates.map(async (filename) => {
           try {
             const r = await fetch(filename, { method: 'HEAD' });
@@ -355,7 +349,7 @@
         hideLoading();
         loadPdbFile(found[0].url);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到檔案，請在網址加上 ?file=檔名.pdb</option>';
         hideLoading();
       }
     }
@@ -366,11 +360,7 @@
     }
 
     /**
-     * 【純演算法動態判定】
-     * 1. 不寫死任何殘基編號
-     * 2. 依 C3'-P 骨架空間距離自動切開 DNA 正反股（徹底避免端點相連閉環）
-     * 3. 嚴格鎖定鋅離子原子索引（絕不誤創白球）
-     * 4. 空間距離算出結合 pocket（特寫時絕非全體）
+     * 【動態結構分析】
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -397,25 +387,19 @@
 
       if (nucleicResList.length === 0) {
         appState.dnaStrandSelections = [];
-        appState.dnaBaseSelection = 'none';
         return;
       }
 
-      // 檢查是否有多條鏈
       const chainSet = new Set(nucleicResList.map(n => n.chain));
       if (chainSet.size >= 2) {
         appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and not protein and not hydrogen`);
-        appState.dnaBaseSelection = 'not protein and not backbone and not hydrogen';
       } else {
-        // 同一條鏈：依據 3' 端後綴或殘基序號跳號動態切割各股
         const strands = [];
         let cur = [];
-        const allRes = [];
 
         for (let i = 0; i < nucleicResList.length; i++) {
           const item = nucleicResList[i];
           cur.push(item.resno);
-          allRes.push(item.resno);
 
           let isBreak = false;
           if (item.resname.endsWith('3')) {
@@ -435,7 +419,6 @@
           }
         }
 
-        // 若無標記則均分
         if (strands.length <= 1 && nucleicResList.length >= 4) {
           const half = Math.floor(nucleicResList.length / 2);
           const s1_min = nucleicResList[0].resno;
@@ -449,13 +432,9 @@
         } else {
           appState.dnaStrandSelections = strands;
         }
-
-        const minTotal = Math.min(...allRes);
-        const maxTotal = Math.max(...allRes);
-        appState.dnaBaseSelection = `(${minTotal}-${maxTotal} and not backbone and not hydrogen)`;
       }
 
-      // 【局部特寫計算】計算真正介於 3.5 Å 內的接觸殘基
+      // 接觸面空間運算 (3.5 Å)
       const protCoords = [];
       const dnaCoords = [];
 
@@ -493,27 +472,13 @@
       const pArr = Array.from(contactP);
       const dArr = Array.from(contactD);
 
-      if (pArr.length > 0) {
-        appState.contactProtSele = `(${pArr.join(' or ')}) and protein and sidechain and not hydrogen`;
-      } else {
-        appState.contactProtSele = 'none';
-      }
-
-      if (dArr.length > 0) {
-        appState.contactDnaSele = `(${dArr.join(' or ')}) and not protein and not backbone and not hydrogen`;
-      } else {
-        appState.contactDnaSele = 'none';
-      }
-
-      if (pArr.length > 0 || dArr.length > 0) {
-        appState.focusViewSele = [...pArr, ...dArr].join(' or ');
-      } else {
-        appState.focusViewSele = 'nucleic';
-      }
+      appState.contactProtSele = pArr.length > 0 ? `(${pArr.join(' or ')}) and protein and sidechain and not hydrogen` : 'none';
+      appState.contactDnaSele = dArr.length > 0 ? `(${dArr.join(' or ')}) and not protein and not backbone and not hydrogen` : 'none';
+      appState.focusViewSele = (pArr.length > 0 || dArr.length > 0) ? [...pArr, ...dArr].join(' or ') : 'nucleic';
     }
 
     /**
-     * 重建所有 Representation (零白球、無相連、真局部)
+     * 重建 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -525,7 +490,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體 (永遠不帶氫、不帶鋅)
+      // 1. 蛋白質主體
       const protBaseSele = 'protein and not hydrogen';
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
@@ -552,7 +517,7 @@
         });
       }
 
-      // 2. DNA 骨架絲帶 (分股獨立繪製，永不相連閉環)
+      // 2. DNA 雙螺旋骨架絲帶 (分股繪製，永不相連)
       appState.dnaStrandSelections.forEach(strandSele => {
         if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
           appState.component.addRepresentation('cartoon', {
@@ -566,26 +531,47 @@
         }
       });
 
-      // 3. DNA 鹼基桿 (Ladder Blocks)：用細 Licorice 呈現，絕不使用會冒出大白球的 base 表示法
+      // 3. DNA 鹼基階梯桿 (Ladder Rungs)
       if (dRep === 'vmd_ladder') {
-        if (appState.dnaBaseSelection && appState.dnaBaseSelection !== 'none') {
-          appState.component.addRepresentation('licorice', {
-            sele: appState.dnaBaseSelection,
-            ...dColorParams,
-            radius: 0.18,
-            multipleBond: 'off'
-          });
-        }
+        // (A) 糖苷鍵短棒：從 C1' 骨架插進鹼基環 (解決鹼基漂浮在空中的問題)
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .N9 or .N1)',
+          ...dColorParams,
+          radius: 0.22,
+          multipleBond: 'off'
+        });
+
+        // (B) 鹼基環平面：保持為圓環骨架
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not backbone and not hydrogen and not resname ZN',
+          ...dColorParams,
+          radius: 0.20,
+          multipleBond: 'off'
+        });
+
+        // (C) 互補配對橫桿：在兩股之間拉出實心的階梯棒 (VMD 經典階梯 Rung)
+        appState.component.addRepresentation('distance', {
+          sele: [
+            ['.N1 and (resname DA or resname DA3 or resname DA5 or resname A)', '.N3 and (resname DT or resname DT3 or resname DT5 or resname T)'],
+            ['.N1 and (resname DG or resname DG3 or resname DG5 or resname G)', '.N3 and (resname DC or resname DC3 or resname DC5 or resname C)'],
+            ['.C1\' and (resname DA or resname DA3 or resname DA5 or resname A)', '.C1\' and (resname DT or resname DT3 or resname DT5 or resname T)'],
+            ['.C1\' and (resname DG or resname DG3 or resname DG5 or resname G)', '.C1\' and (resname DC or resname DC3 or resname DC5 or resname C)']
+          ],
+          color: '#cbd5e1',
+          radius: 0.18,
+          labelVisible: false
+        });
+
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not hydrogen',
+          sele: 'not protein and not hydrogen and not resname ZN',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 4. 鋅離子 (ZN)：只針對單一原子索引，不冒出任何多餘白球
+      // 4. 鋅離子 (ZN)：只針對特定單一金屬球
       if (appState.zincAtomIndex >= 0) {
         appState.component.addRepresentation('spacefill', {
           sele: `@${appState.zincAtomIndex}`,
@@ -605,24 +591,22 @@
         });
       }
 
-      // 6. 結合區特寫模式：只繪製接觸側鏈與鹼基 (無 contact 圖層，絕無白球)
+      // 6. 結合區特寫模式：局部高亮接觸側鏈與鹼基
       if (appState.isFocusingInterface) {
-        // 接觸之蛋白質側鏈
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
             colorScheme: 'element',
-            radius: 0.24,
+            radius: 0.25,
             multipleBond: 'off'
           });
         }
 
-        // 接觸之 DNA 鹼基
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
             colorScheme: 'element',
-            radius: 0.24,
+            radius: 0.25,
             multipleBond: 'off'
           });
         }
@@ -756,7 +740,6 @@
         });
         appState.component = comp;
 
-        // 純動態運算 DNA 股與口袋
         analyzeStructureDynamically(comp.structure);
 
         applyAllRepresentations();
