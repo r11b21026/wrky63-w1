@@ -77,7 +77,7 @@
         <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[160px] sm:max-w-[240px] truncate cursor-pointer hover:bg-slate-800 transition">
           <option value="" disabled selected>搜尋 PDB 檔案中...</option>
         </select>
-        <button id="btn-refresh-files" title="重新掃描目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
+        <button id="btn-refresh-files" title="重新整理目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
         </button>
       </div>
@@ -151,7 +151,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基梯竿 (Ladder)</option>
+            <option value="vmd_ladder" selected>VMD NewCartoon + 階梯橫竿 (Ladder)</option>
             <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
             <option value="licorice">Licorice 全棒狀模型</option>
           </select>
@@ -244,10 +244,12 @@
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
+      ladderPairs: [],
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
-      zincAtomIndex: -1
+      zincAtomIndex: -1,
+      isLoadingFile: false
     };
 
     lucide.createIcons();
@@ -295,7 +297,12 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
+    /**
+     * 自動偵測可讀取的 PDB 檔案 (防重整卡死與非同步鎖定)
+     */
     async function scanFolderFiles() {
+      if (appState.isLoadingFile) return;
+
       const urlParams = new URLSearchParams(window.location.search);
       const specifiedFile = urlParams.get('file') || urlParams.get('pdb');
       if (specifiedFile) {
@@ -326,10 +333,11 @@
       }
 
       if (found.length === 0) {
+        // 常見候選清單
         const candidates = ['complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
         const checks = candidates.map(async (filename) => {
           try {
-            const r = await fetch(filename, { method: 'HEAD' });
+            const r = await fetch(filename, { method: 'HEAD', cache: 'no-cache' });
             if (r.ok) return { name: filename, url: filename };
           } catch (e) {}
           return null;
@@ -349,7 +357,7 @@
         hideLoading();
         loadPdbFile(found[0].url);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到檔案，請在網址加上 ?file=檔名.pdb</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到檔案 (可在網址加上 ?file=檔名.pdb)</option>';
         hideLoading();
       }
     }
@@ -360,7 +368,10 @@
     }
 
     /**
-     * 【動態結構分析】
+     * 【純演算法動態結構分析】
+     * 1. 分割雙螺旋各股 (無端點假相連)
+     * 2. 自動配對互補鹼基的骨架階梯座標，形成純淨 Ladder Rungs
+     * 3. 計算口袋接觸面
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -387,19 +398,25 @@
 
       if (nucleicResList.length === 0) {
         appState.dnaStrandSelections = [];
+        appState.ladderPairs = [];
         return;
       }
 
+      // 1. 動態切割股
       const chainSet = new Set(nucleicResList.map(n => n.chain));
+      const strandGroups = [];
+
       if (chainSet.size >= 2) {
         appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and not protein and not hydrogen`);
       } else {
         const strands = [];
         let cur = [];
+        let curGroup = [];
 
         for (let i = 0; i < nucleicResList.length; i++) {
           const item = nucleicResList[i];
           cur.push(item.resno);
+          curGroup.push(item);
 
           let isBreak = false;
           if (item.resname.endsWith('3')) {
@@ -415,26 +432,42 @@
             const minR = Math.min(...cur);
             const maxR = Math.max(...cur);
             strands.push(`(${minR}-${maxR} and not protein and not hydrogen)`);
+            strandGroups.push([...curGroup]);
             cur = [];
+            curGroup = [];
           }
         }
 
         if (strands.length <= 1 && nucleicResList.length >= 4) {
           const half = Math.floor(nucleicResList.length / 2);
-          const s1_min = nucleicResList[0].resno;
-          const s1_max = nucleicResList[half - 1].resno;
-          const s2_min = nucleicResList[half].resno;
-          const s2_max = nucleicResList[nucleicResList.length - 1].resno;
+          const s1 = nucleicResList.slice(0, half);
+          const s2 = nucleicResList.slice(half);
           appState.dnaStrandSelections = [
-            `(${s1_min}-${s1_max} and not protein and not hydrogen)`,
-            `(${s2_min}-${s2_max} and not protein and not hydrogen)`
+            `(${s1[0].resno}-${s1[s1.length-1].resno} and not protein and not hydrogen)`,
+            `(${s2[0].resno}-${s2[s2.length-1].resno} and not protein and not hydrogen)`
           ];
+          strandGroups.push(s1, s2);
         } else {
           appState.dnaStrandSelections = strands;
         }
       }
 
-      // 接觸面空間運算 (3.5 Å)
+      // 2. 自動配對互補階梯棒 (Ladder Rungs)：正反兩股對應的 C1' 骨架配對
+      const ladderPairs = [];
+      if (strandGroups.length >= 2) {
+        const g1 = strandGroups[0];
+        const g2 = strandGroups[1];
+        const len = Math.min(g1.length, g2.length);
+        // DNA 兩股為反向平行 (Antiparallel)，故 g1 的 i 對應 g2 的 len - 1 - i
+        for (let i = 0; i < len; i++) {
+          const r1 = g1[i].resno;
+          const r2 = g2[len - 1 - i].resno;
+          ladderPairs.push([`(${r1} and .C1\')`, `(${r2} and .C1\')`]);
+        }
+      }
+      appState.ladderPairs = ladderPairs;
+
+      // 3. 口袋接觸面運算 (3.5 Å 空間距離)
       const protCoords = [];
       const dnaCoords = [];
 
@@ -478,7 +511,7 @@
     }
 
     /**
-     * 重建 Representation
+     * 重建 Representation (經典 VMD Ladder：雙螺旋絲帶 + 實心跨股階梯棒)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -517,7 +550,7 @@
         });
       }
 
-      // 2. DNA 雙螺旋骨架絲帶 (分股繪製，永不相連)
+      // 2. DNA 雙螺旋骨架絲帶 (分股繪製，絕不相連)
       appState.dnaStrandSelections.forEach(strandSele => {
         if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
           appState.component.addRepresentation('cartoon', {
@@ -531,47 +564,28 @@
         }
       });
 
-      // 3. DNA 鹼基階梯桿 (Ladder Rungs)
+      // 3. DNA 階梯橫竿 (Ladder Rungs)
       if (dRep === 'vmd_ladder') {
-        // (A) 糖苷鍵短棒：從 C1' 骨架插進鹼基環 (解決鹼基漂浮在空中的問題)
-        appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .N9 or .N1)',
-          ...dColorParams,
-          radius: 0.22,
-          multipleBond: 'off'
-        });
-
-        // (B) 鹼基環平面：保持為圓環骨架
-        appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not backbone and not hydrogen and not resname ZN',
-          ...dColorParams,
-          radius: 0.20,
-          multipleBond: 'off'
-        });
-
-        // (C) 互補配對橫桿：在兩股之間拉出實心的階梯棒 (VMD 經典階梯 Rung)
-        appState.component.addRepresentation('distance', {
-          sele: [
-            ['.N1 and (resname DA or resname DA3 or resname DA5 or resname A)', '.N3 and (resname DT or resname DT3 or resname DT5 or resname T)'],
-            ['.N1 and (resname DG or resname DG3 or resname DG5 or resname G)', '.N3 and (resname DC or resname DC3 or resname DC5 or resname C)'],
-            ['.C1\' and (resname DA or resname DA3 or resname DA5 or resname A)', '.C1\' and (resname DT or resname DT3 or resname DT5 or resname T)'],
-            ['.C1\' and (resname DG or resname DG3 or resname DG5 or resname G)', '.C1\' and (resname DC or resname DC3 or resname DC5 or resname C)']
-          ],
-          color: '#cbd5e1',
-          radius: 0.18,
-          labelVisible: false
-        });
-
+        // 使用跨鏈配對橫柱繪製實心階梯棒 (VMD 經典階梯棒，絕不把環拆解成雜亂的 licorice)
+        if (appState.ladderPairs.length > 0) {
+          appState.component.addRepresentation('distance', {
+            sele: appState.ladderPairs,
+            color: '#cbd5e1',
+            radius: 0.22,
+            labelVisible: false
+          });
+        }
       } else if (dRep === 'licorice') {
+        // 使用者主動選 Licorice 時才渲染全棒狀
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not hydrogen and not resname ZN',
+          sele: 'not protein and not hydrogen',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 4. 鋅離子 (ZN)：只針對特定單一金屬球
+      // 4. 鋅離子 (ZN)：精緻小金屬球
       if (appState.zincAtomIndex >= 0) {
         appState.component.addRepresentation('spacefill', {
           sele: `@${appState.zincAtomIndex}`,
@@ -591,7 +605,7 @@
         });
       }
 
-      // 6. 結合區特寫模式：局部高亮接觸側鏈與鹼基
+      // 6. 結合區特寫模式：只繪製接觸側鏈與接觸鹼基
       if (appState.isFocusingInterface) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
@@ -722,9 +736,11 @@
     }
 
     /**
-     * 載入 PDB 檔案
+     * 載入 PDB 檔案 (帶防頻繁重整鎖定機制)
      */
     async function loadPdbFile(url) {
+      if (appState.isLoadingFile) return;
+      appState.isLoadingFile = true;
       stopPlayback();
       showLoading('正在讀取結構...', url);
 
@@ -779,9 +795,11 @@
         console.error('PDB 載入失敗:', err);
         hideLoading();
         dom.loadingText.textContent = '載入失敗: ' + url;
-        dom.loadingSubtext.textContent = '請檢查檔案是否存在';
+        dom.loadingSubtext.textContent = '請檢查檔案是否存在且可讀取';
         dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
         setTimeout(hideLoading, 3000);
+      } finally {
+        appState.isLoadingFile = false;
       }
     }
 
