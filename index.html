@@ -368,10 +368,7 @@
     }
 
     /**
-     * 【純演算法動態結構分析】
-     * 1. 分割雙螺旋各股 (無端點假相連)
-     * 2. 自動配對互補鹼基的骨架階梯座標，形成純淨 Ladder Rungs
-     * 3. 計算口袋接觸面
+     * 【精準空間斷鏈算法】以 O3'-P 骨架真實鍵長動態切開 DNA，絕不端點相連
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -386,10 +383,18 @@
 
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
+          let o3 = null, p = null, c1 = null;
+          r.eachAtom(a => {
+            const aname = a.atomname.trim();
+            if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
+            if (aname === "P") p = { x: a.x, y: a.y, z: a.z };
+            if (aname === "C1'" || aname === "C1*") c1 = { x: a.x, y: a.y, z: a.z, index: a.index };
+          });
           nucleicResList.push({
             resno: r.resno,
             chain: (r.chainname || 'A').trim(),
-            resname: rname
+            resname: rname,
+            o3: o3, p: p, c1: c1
           });
         }
       });
@@ -402,72 +407,56 @@
         return;
       }
 
-      // 1. 動態切割股
-      const chainSet = new Set(nucleicResList.map(n => n.chain));
+      // 依據前後殘基 O3' 到 P 的距離切斷股 (正常同一股距離約 1.6 Å，兩股斷點處距離 > 3.0 Å)
       const strandGroups = [];
+      let curGroup = [nucleicResList[0]];
 
-      if (chainSet.size >= 2) {
-        appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and not protein and not hydrogen`);
-      } else {
-        const strands = [];
-        let cur = [];
-        let curGroup = [];
+      for (let i = 0; i < nucleicResList.length - 1; i++) {
+        const r1 = nucleicResList[i];
+        const r2 = nucleicResList[i + 1];
 
-        for (let i = 0; i < nucleicResList.length; i++) {
-          const item = nucleicResList[i];
-          cur.push(item.resno);
-          curGroup.push(item);
-
-          let isBreak = false;
-          if (item.resname.endsWith('3')) {
-            isBreak = true;
-          } else if (i < nucleicResList.length - 1) {
-            const next = nucleicResList[i + 1];
-            if (next.resno - item.resno > 1 || next.resname.endsWith('5')) {
-              isBreak = true;
-            }
-          }
-
-          if (isBreak || i === nucleicResList.length - 1) {
-            const minR = Math.min(...cur);
-            const maxR = Math.max(...cur);
-            strands.push(`(${minR}-${maxR} and not protein and not hydrogen)`);
-            strandGroups.push([...curGroup]);
-            cur = [];
-            curGroup = [];
-          }
+        let dist = 999;
+        if (r1.o3 && r2.p) {
+          const dx = r1.o3.x - r2.p.x;
+          const dy = r1.o3.y - r2.p.y;
+          const dz = r1.o3.z - r2.p.z;
+          dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        if (strands.length <= 1 && nucleicResList.length >= 4) {
-          const half = Math.floor(nucleicResList.length / 2);
-          const s1 = nucleicResList.slice(0, half);
-          const s2 = nucleicResList.slice(half);
-          appState.dnaStrandSelections = [
-            `(${s1[0].resno}-${s1[s1.length-1].resno} and not protein and not hydrogen)`,
-            `(${s2[0].resno}-${s2[s2.length-1].resno} and not protein and not hydrogen)`
-          ];
-          strandGroups.push(s1, s2);
+        // 若骨架不連續或跳號，強制切斷成新的一股
+        if (dist > 3.0 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
+          strandGroups.push(curGroup);
+          curGroup = [r2];
         } else {
-          appState.dnaStrandSelections = strands;
+          curGroup.push(r2);
         }
       }
+      if (curGroup.length > 0) strandGroups.push(curGroup);
 
-      // 2. 自動配對互補階梯棒 (Ladder Rungs)：正反兩股對應的 C1' 骨架配對
+      // 產生各股獨立的 Cartoon 選取字串 (保證 100% 分開)
+      appState.dnaStrandSelections = strandGroups.map(grp => {
+        const minR = grp[0].resno;
+        const maxR = grp[grp.length - 1].resno;
+        return `(${minR}-${maxR} and not protein and not hydrogen)`;
+      });
+
+      // 產生梯竿 (Ladder Rungs)：正反兩股對應的 C1' 原子對配對
       const ladderPairs = [];
       if (strandGroups.length >= 2) {
         const g1 = strandGroups[0];
         const g2 = strandGroups[1];
         const len = Math.min(g1.length, g2.length);
-        // DNA 兩股為反向平行 (Antiparallel)，故 g1 的 i 對應 g2 的 len - 1 - i
         for (let i = 0; i < len; i++) {
-          const r1 = g1[i].resno;
-          const r2 = g2[len - 1 - i].resno;
-          ladderPairs.push([`(${r1} and .C1\')`, `(${r2} and .C1\')`]);
+          const c1_A = g1[i].c1;
+          const c1_B = g2[len - 1 - i].c1;
+          if (c1_A && c1_B) {
+            ladderPairs.push([`@${c1_A.index}`, `@${c1_B.index}`]);
+          }
         }
       }
       appState.ladderPairs = ladderPairs;
 
-      // 3. 口袋接觸面運算 (3.5 Å 空間距離)
+      // 結合口袋計算 (3.5 Å 空間接觸)
       const protCoords = [];
       const dnaCoords = [];
 
@@ -477,11 +466,8 @@
         const isDna = a.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         const isProt = a.isProtein() && !isDna;
 
-        if (isProt) {
-          protCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
-        } else if (isDna) {
-          dnaCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
-        }
+        if (isProt) protCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
+        else if (isDna) dnaCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
       });
 
       const contactP = new Set();
@@ -495,7 +481,7 @@
           const dx = p.x - d.x;
           const dy = p.y - d.y;
           const dz = p.z - d.z;
-          if (dx*dx + dy*dy + dz*dz <= cutoffSq) {
+          if (dx * dx + dy * dy + dz * dz <= cutoffSq) {
             contactP.add(p.resno);
             contactD.add(d.resno);
           }
@@ -511,7 +497,7 @@
     }
 
     /**
-     * 重建所有 Representation (徹底解決顏色重疊、還原正統 VMD Ladder 橫竿)
+     * 重建所有 Representation (乾淨單根梯竿 + 無端點相連)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -523,7 +509,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體：嚴格只選 protein，不選鋅離子，不疊加任何多餘圖層
+      // 1. 蛋白質主體
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
@@ -550,7 +536,7 @@
         });
       }
 
-      // 2. DNA 雙螺旋骨架絲帶：分股獨立繪製 (嚴格限定 not protein，杜絕在蛋白上疊加 DNA 色帶)
+      // 2. DNA 雙螺旋絲帶 (分股獨立繪製，永不相連閉環)
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -566,14 +552,18 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD Ladder 官方標準算法：base 模式)
+      // 3. DNA 階梯橫竿 (真正的 VMD Ladder Rung：純淨實心橫柱，絕不畫出疊在一起的雜環)
       if (dRep === 'vmd_ladder') {
-        // 嚴格過濾氫原子與蛋白質，只對核酸主體繪製一根根實心梯竿 (無白球、骨架與鹼基無縫相連)
-        appState.component.addRepresentation('base', {
-          sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
-          ...dColorParams
-        });
+        if (appState.ladderPairs && appState.ladderPairs.length > 0) {
+          appState.component.addRepresentation('distance', {
+            sele: appState.ladderPairs,
+            color: '#cbd5e1',
+            radius: 0.22,
+            labelVisible: false
+          });
+        }
       } else if (dRep === 'licorice') {
+        // 使用者主動選 Licorice 才顯示所有原子鍵
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
@@ -582,7 +572,7 @@
         });
       }
 
-      // 4. 鋅離子 (ZN)：常駐獨立金屬球
+      // 4. 鋅離子 (ZN)
       if (appState.zincAtomIndex >= 0) {
         appState.component.addRepresentation('spacefill', {
           sele: `@${appState.zincAtomIndex}`,
@@ -608,7 +598,7 @@
         });
       }
 
-      // 6. 結合區特寫模式：只針對計算出的接觸原子加上 Licorice
+      // 6. 結合區特寫模式：只針對接觸側鏈與接觸鹼基加上 Licorice
       if (appState.isFocusingInterface) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
