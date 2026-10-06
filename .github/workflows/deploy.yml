@@ -1,0 +1,42 @@
+name: Deploy Pages with PDB List
+
+on:
+  push:
+    branches: ["main"] # 如果你的預設分支是 master，請改成 master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 自動搜尋當前目錄（或子目錄）下的所有 .pdb 檔名，並輸出成 pdb_list.json
+      - name: Generate PDB List
+        run: |
+          python3 -c "import os, json; files = sorted([f for f in os.listdir('.') if f.lower().endswith('.pdb')]); print(f'偵測到 PDB 檔案: {files}'); open('pdb_list.json', 'w').write(json.dumps(files))"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
