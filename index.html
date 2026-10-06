@@ -94,7 +94,7 @@
       <!-- 統計數據 -->
       <div class="vmd-panel hidden md:flex items-center space-x-3.5 px-3 py-2 rounded-xl font-mono-vmd text-xs text-slate-300">
         <div><span class="text-slate-500">原子數:</span> <span id="atom-count" class="text-slate-200">--</span></div>
-        <div><span class="text-slate-500">影格 (Frame):</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
+        <div><span class="text-slate-500">影格:</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
       </div>
 
       <!-- 渲染樣式選單開關 -->
@@ -103,7 +103,7 @@
         <span class="hidden sm:inline">樣式設定</span>
       </button>
 
-      <!-- 重設視角 (r) -->
+      <!-- 重設視角 -->
       <button id="btn-reset-view" title="重設鏡頭視角置中 (鍵盤 R)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="focus" class="w-4 h-4"></i>
       </button>
@@ -148,9 +148,9 @@
     <div class="mb-3">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">DNA 樣式 (DNA Style)</label>
       <select id="dna-style-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
-        <option value="licorice" selected>Licorice 棒狀模型 (顯示鹼基骨架)</option>
-        <option value="cartoon">Cartoon 卡通絲帶 (簡約流線)</option>
-        <option value="spacefill">VDW 球體 (空間填補)</option>
+        <option value="licorice" selected>Licorice 棒狀模型</option>
+        <option value="cartoon">Cartoon 卡通絲帶</option>
+        <option value="spacefill">VDW 球體</option>
       </select>
     </div>
 
@@ -158,7 +158,7 @@
     <div class="mb-2">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">著色規則 (Coloring Method)</label>
       <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
-        <option value="sstruc" selected>ResType / 二級結構 (Secondary Structure)</option>
+        <option value="sstruc" selected>ResType / 二級結構</option>
         <option value="chainid">Chain ID 鏈編號</option>
         <option value="element">Element (CPK 原子顏色)</option>
         <option value="residueindex">Residue Index 漸層彩虹</option>
@@ -198,7 +198,7 @@
           </button>
 
           <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停">
-            <i id="play-icon" data-lucide="play" class="w-5 h-5 fill-current"></i>
+            <i id="play-icon" data-lucide="pause" class="w-5 h-5 fill-current"></i>
           </button>
 
           <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格">
@@ -231,29 +231,17 @@
       <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
         <h3 class="text-sm font-bold text-cyan-400 flex items-center space-x-2">
           <i data-lucide="info" class="w-4 h-4"></i>
-          <span>操作手勢與快捷鍵指南</span>
+          <span>操作手勢指南</span>
         </h3>
         <button id="btn-close-info" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
-
       <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
-        <div>
-          <h4 class="font-bold text-white mb-1">手機與平板觸控</h4>
-          <ul class="list-disc pl-5 space-y-1 text-slate-300">
-            <li><strong>單指滑動：</strong>3D 任意旋轉模型</li>
-            <li><strong>雙指捏合：</strong>放大 / 縮小 (Zoom)</li>
-            <li><strong>雙指同向拖曳：</strong>平移視角 (Pan)</li>
-          </ul>
-        </div>
-
-        <div>
-          <h4 class="font-bold text-white mb-1">電腦鍵盤快捷鍵</h4>
-          <ul class="list-disc pl-5 space-y-1 text-slate-300">
-            <li><strong>空白鍵 (Space)：</strong>播放 / 暫停軌跡</li>
-            <li><strong>左右方向鍵 (← / →)：</strong>步進 1 個影格</li>
-            <li><strong>R 鍵：</strong>重設視角置中</li>
-          </ul>
-        </div>
+        <ul class="list-disc pl-5 space-y-1 text-slate-300">
+          <li><strong>單指滑動：</strong>3D 任意旋轉模型</li>
+          <li><strong>雙指捏合：</strong>放大 / 縮小 (Zoom)</li>
+          <li><strong>雙指同向拖曳：</strong>平移視角 (Pan)</li>
+          <li><strong>空白鍵：</strong>播放 / 暫停</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -269,14 +257,11 @@
     const appState = {
       stage: null,
       component: null,
-      trajComp: null,
+      trajPlayer: null,
       totalFrames: 1,
       currentFrame: 0,
       isPlaying: false,
       loopMode: 'loop',
-      direction: 1,
-      fps: 20,
-      timerId: null,
       repStyle: 'cartoon',
       dnaStyle: 'licorice',
       colorScheme: 'sstruc',
@@ -390,26 +375,23 @@
     }
 
     /**
-     * 重建所有 Representation：確保乾淨無重疊！
+     * 清空並重新繪製當前影格的 Representation (絕不重疊)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
-
-      // ★★★ 關鍵：每次切換都乾淨清空，杜絕殘留 ★★★
       appState.component.removeAllRepresentations();
 
       const pRep = appState.repStyle;
       const dRep = appState.dnaStyle;
       const color = appState.colorScheme;
 
-      // 1. 蛋白質主體 (僅針對 protein，絕不繪製多餘的 within 殘基)
+      // 1. 蛋白質主體
       if (pRep === 'cartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: 'protein',
           colorScheme: color,
           aspectRatio: 3.2,
-          scale: 0.8,
-          smoothSheet: true
+          scale: 0.8
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
@@ -431,7 +413,7 @@
         });
       }
 
-      // 2. DNA / 核酸 (依據使用者在下拉選單選擇的樣式獨立渲染)
+      // 2. DNA / 核酸
       if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic',
@@ -452,7 +434,7 @@
         });
       }
 
-      // 3. 鋅離子 (ZN)：只畫金屬原子球本體，乾淨俐落
+      // 3. 鋅離子 (ZN)：只畫金屬原子球
       appState.component.addRepresentation('spacefill', {
         sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
         color: '#9ca3af',
@@ -461,55 +443,63 @@
     }
 
     /**
-     * 載入 PDB 檔案並掛載動畫 Trajectory
+     * 載入 PDB 檔案 (核心：以 asTrajectory: true 消除多影格重疊)
      */
     async function loadPdbFile(urlOrFile) {
-      stopPlayback();
+      if (appState.trajPlayer) {
+        try { appState.trajPlayer.pause(); } catch(e){}
+        appState.trajPlayer = null;
+      }
+
       const displayName = typeof urlOrFile === 'string' ? urlOrFile : urlOrFile.name;
       showLoading('正在讀取結構軌跡...', displayName);
 
       try {
         appState.stage.removeAllComponents();
 
-        const comp = await appState.stage.loadFile(urlOrFile, { defaultRepresentation: false });
+        // ★★★ 關鍵核心：asTrajectory: true 讓 NGL 只顯示單一幀，座標動態更新，杜絕疊影 ★★★
+        const comp = await appState.stage.loadFile(urlOrFile, {
+          defaultRepresentation: false,
+          asTrajectory: true
+        });
         appState.component = comp;
 
-        // 重新繪製結構
+        // 繪製初始 Representation
         applyAllRepresentations();
         comp.autoView(500);
 
-        const atomTotal = comp.structure.atomCount || 0;
-        dom.atomCount.textContent = atomTotal.toLocaleString();
+        // 掛載 Trajectory 播放引擎
+        const trajComp = comp.addTrajectory();
+        const trajectory = trajComp.trajectory;
 
-        // 綁定 Trajectory
-        const traj = comp.addTrajectory();
-        appState.trajComp = traj;
+        // 綁定影格計數與自動播放
+        trajectory.signals.countChanged.add(function (count) {
+          appState.totalFrames = count;
+          dom.slider.max = count - 1;
+          dom.sliderTotal.textContent = String(count - 1);
+          dom.frameCounter.textContent = `1 / ${count}`;
 
-        traj.trajectory.signals.countChanged.add(function (count) {
           if (count > 1) {
-            appState.totalFrames = count;
-            dom.slider.max = count - 1;
-            dom.sliderTotal.textContent = String(count - 1);
-            setFrame(0);
-            startPlayback();
+            setupPlayer(trajectory);
           } else {
-            appState.totalFrames = 1;
-            dom.slider.max = 0;
-            dom.slider.value = 0;
-            dom.sliderCurr.textContent = '0';
-            dom.sliderTotal.textContent = '0';
             dom.frameCounter.textContent = '1 / 1 (靜態)';
+            updatePlayIcon(false);
           }
         });
 
-        const initCount = traj.trajectory.frameCount || 1;
+        // 若影格數立即可讀
+        const initCount = trajectory.frameCount || 1;
         if (initCount > 1) {
           appState.totalFrames = initCount;
           dom.slider.max = initCount - 1;
           dom.sliderTotal.textContent = String(initCount - 1);
-          setFrame(0);
-          startPlayback();
+          dom.frameCounter.textContent = `1 / ${initCount}`;
+          setupPlayer(trajectory);
         }
+
+        // 讀取每影格原子數 (去除疊加干擾)
+        const atoms = (comp.structure.atomCount || 0) / (trajectory.frameCount || 1);
+        dom.atomCount.textContent = Math.round(atoms).toLocaleString();
 
         hideLoading();
       } catch (err) {
@@ -522,79 +512,46 @@
       }
     }
 
-    function setFrame(fIndex) {
-      if (!appState.trajComp) return;
-      const maxF = appState.totalFrames - 1;
-      let target = Math.max(0, Math.min(fIndex, maxF));
+    /**
+     * 設定原生播放控制器
+     */
+    function setupPlayer(trajectory) {
+      appState.trajPlayer = trajectory.player;
+      appState.trajPlayer.mode = appState.loopMode; // 'loop', 'rock', 'once'
+      appState.trajPlayer.timeout = 50; // 20 fps
 
-      appState.currentFrame = target;
-      appState.trajComp.setFrame(target);
+      // 監聽影格變更更新 UI
+      trajectory.signals.frameChanged.add(function (frame) {
+        appState.currentFrame = frame;
+        dom.slider.value = frame;
+        dom.sliderCurr.textContent = frame;
+        dom.frameCounter.textContent = `${frame + 1} / ${appState.totalFrames}`;
+      });
 
-      dom.frameCounter.textContent = `${target} / ${maxF}`;
-      dom.slider.value = target;
-      dom.sliderCurr.textContent = target;
-    }
-
-    function stepFrame(step) {
-      if (appState.totalFrames <= 1) return;
-      let next = appState.currentFrame + step;
-      const max = appState.totalFrames - 1;
-
-      if (next > max) {
-        if (appState.loopMode === 'loop') next = 0;
-        else if (appState.loopMode === 'rock') {
-          appState.direction = -1;
-          next = Math.max(0, max - 1);
-        } else {
-          stopPlayback();
-          return;
-        }
-      } else if (next < 0) {
-        if (appState.loopMode === 'loop') next = max;
-        else if (appState.loopMode === 'rock') {
-          appState.direction = 1;
-          next = Math.min(max, 1);
-        } else {
-          stopPlayback();
-          return;
-        }
-      }
-      setFrame(next);
-    }
-
-    function startPlayback() {
-      if (appState.totalFrames <= 1) return;
-      stopPlayback();
+      // 自動開始播放
+      appState.trajPlayer.play();
       appState.isPlaying = true;
-
-      const icon = dom.btnPlay.querySelector('i');
-      if (icon) {
-        icon.setAttribute('data-lucide', 'pause');
-        lucide.createIcons();
-      }
-
-      const intervalMs = Math.round(1000 / appState.fps);
-      appState.timerId = setInterval(() => {
-        stepFrame(appState.direction);
-      }, intervalMs);
+      updatePlayIcon(true);
     }
 
-    function stopPlayback() {
-      appState.isPlaying = false;
-      if (appState.timerId) {
-        clearInterval(appState.timerId);
-        appState.timerId = null;
-      }
+    function updatePlayIcon(playing) {
       const icon = dom.btnPlay.querySelector('i');
-      if (icon) {
-        icon.setAttribute('data-lucide', 'play');
-        lucide.createIcons();
-      }
+      if (!icon) return;
+      icon.setAttribute('data-lucide', playing ? 'pause' : 'play');
+      lucide.createIcons();
     }
 
     function togglePlay() {
-      if (appState.isPlaying) stopPlayback();
-      else startPlayback();
+      if (!appState.trajPlayer) return;
+      if (appState.isPlaying) {
+        appState.trajPlayer.pause();
+        appState.isPlaying = false;
+        updatePlayIcon(false);
+      } else {
+        appState.trajPlayer.play();
+        appState.isPlaying = true;
+        updatePlayIcon(true);
+      }
     }
 
     function drawVmdAxes() {
@@ -660,28 +617,45 @@
       dom.btnPlay.addEventListener('click', togglePlay);
 
       dom.btnPrevFrame.addEventListener('click', () => {
-        stopPlayback();
-        stepFrame(-1);
+        if (!appState.trajPlayer) return;
+        appState.trajPlayer.pause();
+        appState.isPlaying = false;
+        updatePlayIcon(false);
+        const prev = Math.max(0, appState.currentFrame - 1);
+        appState.trajPlayer.trajectory.setFrame(prev);
       });
+
       dom.btnNextFrame.addEventListener('click', () => {
-        stopPlayback();
-        stepFrame(1);
+        if (!appState.trajPlayer) return;
+        appState.trajPlayer.pause();
+        appState.isPlaying = false;
+        updatePlayIcon(false);
+        const next = Math.min(appState.totalFrames - 1, appState.currentFrame + 1);
+        appState.trajPlayer.trajectory.setFrame(next);
       });
+
       dom.btnFirstFrame.addEventListener('click', () => {
-        stopPlayback();
-        setFrame(0);
+        if (!appState.trajPlayer) return;
+        appState.trajPlayer.trajectory.setFrame(0);
       });
+
       dom.btnLastFrame.addEventListener('click', () => {
-        stopPlayback();
-        setFrame(appState.totalFrames - 1);
+        if (!appState.trajPlayer) return;
+        appState.trajPlayer.trajectory.setFrame(appState.totalFrames - 1);
       });
 
       dom.slider.addEventListener('input', (e) => {
-        stopPlayback();
-        setFrame(parseInt(e.target.value, 10));
+        if (!appState.trajPlayer) return;
+        if (appState.isPlaying) {
+          appState.trajPlayer.pause();
+          appState.isPlaying = false;
+          updatePlayIcon(false);
+        }
+        appState.trajPlayer.trajectory.setFrame(parseInt(e.target.value, 10));
       });
 
       dom.btnLoopMode.addEventListener('click', () => {
+        if (!appState.trajPlayer) return;
         if (appState.loopMode === 'loop') {
           appState.loopMode = 'rock';
           dom.loopLabel.textContent = '往返 (ROCK)';
@@ -692,11 +666,13 @@
           appState.loopMode = 'loop';
           dom.loopLabel.textContent = '循環 (LOOP)';
         }
+        appState.trajPlayer.mode = appState.loopMode;
       });
 
       dom.fpsSelect.addEventListener('change', (e) => {
-        appState.fps = parseInt(e.target.value, 10);
-        if (appState.isPlaying) startPlayback();
+        if (!appState.trajPlayer) return;
+        const fps = parseInt(e.target.value, 10);
+        appState.trajPlayer.timeout = Math.round(1000 / fps);
       });
 
       dom.btnResetView.addEventListener('click', () => {
@@ -710,7 +686,7 @@
         dom.repModal.classList.add('hidden');
       });
 
-      // 蛋白質樣式按鈕
+      // 蛋白質樣式
       document.querySelectorAll('.rep-style-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.rep-style-btn').forEach(b => {
@@ -725,13 +701,13 @@
         });
       });
 
-      // DNA 樣式下拉選單
+      // DNA 樣式
       dom.dnaStyleSelect.addEventListener('change', (e) => {
         appState.dnaStyle = e.target.value;
         applyAllRepresentations();
       });
 
-      // 配色下拉選單
+      // 配色
       dom.colorSelect.addEventListener('change', (e) => {
         appState.colorScheme = e.target.value;
         applyAllRepresentations();
@@ -746,11 +722,9 @@
           e.preventDefault();
           togglePlay();
         } else if (e.code === 'ArrowRight') {
-          stopPlayback();
-          stepFrame(1);
+          dom.btnNextFrame.click();
         } else if (e.code === 'ArrowLeft') {
-          stopPlayback();
-          stepFrame(-1);
+          dom.btnPrevFrame.click();
         } else if (e.key === 'r' || e.key === 'R') {
           if (appState.component) appState.component.autoView(400);
         }
