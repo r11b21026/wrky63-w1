@@ -53,12 +53,21 @@
   <!-- 3D 渲染視窗 -->
   <div id="viewport" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
 
+  <!-- 拖曳提示框 -->
+  <div id="drop-overlay" class="hidden absolute inset-0 z-40 bg-cyan-950/60 border-4 border-dashed border-cyan-400 flex flex-col items-center justify-center pointer-events-none">
+    <i data-lucide="upload-cloud" class="w-16 h-16 text-cyan-400 mb-2 animate-bounce"></i>
+    <div class="text-cyan-200 text-lg font-bold font-mono-vmd">放開以載入 PDB 檔案</div>
+  </div>
+
+  <!-- 隱藏的本地檔案選擇 input -->
+  <input type="file" id="local-file-input" accept=".pdb" class="hidden" />
+
   <!-- 讀取狀態遮罩 -->
   <div id="loading-overlay" class="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center transition-opacity duration-300 pointer-events-none">
     <div class="vmd-panel rounded-2xl p-6 flex flex-col items-center space-y-3 pointer-events-auto border border-cyan-500/40 shadow-2xl">
       <div class="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div>
-      <div class="font-mono-vmd text-sm text-cyan-300 font-bold tracking-wider" id="loading-text">掃描資料夾 PDB 結構中...</div>
-      <div class="text-[12px] text-slate-400" id="loading-subtext">請稍候</div>
+      <div class="font-mono-vmd text-sm text-cyan-300 font-bold tracking-wider" id="loading-text">請選取或拖入 PDB 結構...</div>
+      <div class="text-[12px] text-slate-400" id="loading-subtext">支援任意長度 DNA 複合體</div>
     </div>
   </div>
 
@@ -73,12 +82,13 @@
       </div>
 
       <div class="flex items-center space-x-1.5">
-        <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400"></i>
-        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[150px] sm:max-w-[240px] truncate cursor-pointer hover:bg-slate-800 transition">
-          <option value="" disabled selected>偵測 PDB 檔案中...</option>
+        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[150px] sm:max-w-[220px] truncate cursor-pointer hover:bg-slate-800 transition">
+          <option value="" disabled selected>請選擇或載入檔案...</option>
         </select>
-        <button id="btn-refresh-files" title="重新掃描資料夾" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        
+        <!-- 自由選取本機 PDB 按鈕 -->
+        <button id="btn-browse-file" title="開啟本機 PDB 檔案" class="p-1.5 text-slate-300 hover:text-cyan-300 rounded-lg hover:bg-slate-800 transition flex items-center space-x-1">
+          <i data-lucide="folder-open" class="w-4 h-4"></i>
         </button>
       </div>
     </div>
@@ -87,7 +97,7 @@
     <div class="flex items-center space-x-2 pointer-events-auto">
       
       <!-- 一鍵結合口袋特寫按鈕 -->
-      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (只顯示接觸側鏈與鹼基)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫核心結合口袋 (動態計算接觸側鏈與鹼基)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -105,7 +115,7 @@
     </div>
   </header>
 
-  <!-- 幾何顯示與自訂顏色面板 -->
+  <!-- 樣式設定面板 -->
   <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-88 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
     <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
       <div class="flex items-center space-x-2">
@@ -225,8 +235,6 @@
   </footer>
 
   <script>
-    const PROBE_LIST = ['traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb', 'complex_db_dry.pdb'];
-
     const appState = {
       stage: null,
       component: null,
@@ -245,20 +253,23 @@
       dnaColor: 'resname',
       showBaseLabels: false,
       isFocusingInterface: false,
-      availableFiles: [],
-      strand1Sele: 'nucleic',
-      strand2Sele: ''
+      dnaStrandSelections: [],
+      contactProtSele: '',
+      contactDnaSele: '',
+      focusViewSele: ''
     };
 
     lucide.createIcons();
 
     const dom = {
       viewport: document.getElementById('viewport'),
+      dropOverlay: document.getElementById('drop-overlay'),
+      localFileInput: document.getElementById('local-file-input'),
+      btnBrowseFile: document.getElementById('btn-browse-file'),
       loadingOverlay: document.getElementById('loading-overlay'),
       loadingText: document.getElementById('loading-text'),
       loadingSubtext: document.getElementById('loading-subtext'),
       fileSelector: document.getElementById('file-selector'),
-      btnRefreshFiles: document.getElementById('btn-refresh-files'),
       bottomTimeline: document.getElementById('bottom-timeline'),
       slider: document.getElementById('trajectory-slider'),
       sliderCurr: document.getElementById('slider-curr-frame'),
@@ -295,59 +306,47 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    async function scanPdbFiles() {
-      showLoading('掃描目錄中...', '尋找 PDB 檔案');
-      let found = [];
-
+    /**
+     * 動態掃描環境：若是 GitHub Pages 則動態讀取目錄，否則提示載入
+     */
+    async function scanEnvironmentFiles() {
       const hostname = window.location.hostname;
       const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
       const isGitHubPages = hostname.endsWith('github.io');
 
       if (isGitHubPages && pathname) {
+        showLoading('掃描 GitHub 倉庫中...', '偵測 PDB 檔案');
         const owner = hostname.split('.')[0];
         const repo = pathname.split('/')[0];
         try {
           const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`);
           if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data)) {
-              found = data
-                .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
-                .map(item => ({ name: item.name, url: item.name }));
+            const found = data
+              .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
+              .map(item => ({ name: item.name, url: item.name }));
+
+            if (found.length > 0) {
+              dom.fileSelector.innerHTML = '';
+              found.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.url;
+                opt.textContent = f.name;
+                dom.fileSelector.appendChild(opt);
+              });
+              hideLoading();
+              loadPdbFile(found[0].url);
+              return;
             }
           }
         } catch (e) {
-          console.warn('GitHub API 未回應:', e);
+          console.warn('GitHub API 無法獲取內容清單:', e);
         }
       }
 
-      if (found.length === 0) {
-        const checks = PROBE_LIST.map(async (filename) => {
-          try {
-            const r = await fetch(filename, { method: 'HEAD' });
-            if (r.ok) return { name: filename, url: filename };
-          } catch (e) {}
-          return null;
-        });
-        const resList = await Promise.all(checks);
-        found = resList.filter(Boolean);
-      }
-
-      appState.availableFiles = found;
-      dom.fileSelector.innerHTML = '';
-      if (found.length > 0) {
-        found.forEach(f => {
-          const opt = document.createElement('option');
-          opt.value = f.url;
-          opt.textContent = f.name;
-          dom.fileSelector.appendChild(opt);
-        });
-        hideLoading();
-        loadPdbFile(found[0].url);
-      } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案</option>';
-        hideLoading();
-      }
+      // 一般本地或自託管環境，預設提示使用者選檔
+      dom.fileSelector.innerHTML = '<option value="" disabled selected>點擊右側資料夾選取 .pdb</option>';
+      hideLoading();
     }
 
     function getColorParams(colorVal) {
@@ -356,54 +355,146 @@
     }
 
     /**
-     * 強制準確辨識 DNA 兩股殘基號碼區間 (80~93 與 94~107)
+     * 【通用動態算法】偵測 DNA 股數與邊界，適用於任何長度
      */
-    function analyzeDnaStrands(structure) {
-      const dnaResnos = [];
-      const endResnos = [];
-
+    function autoDetectDnaStrands(structure) {
+      const nucleicResidues = [];
+      
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
-        // 判定是否為 DNA 殘基
-        if (r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?|DA|DT|DC|DG)$/.test(rname)) {
-          dnaResnos.push(r.resno);
-          // 若殘基名稱帶有 3 (如 DA3, DC3)，表示為 3' 端點
-          if (rname.endsWith('3')) {
-            endResnos.push(r.resno);
-          }
+        const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
+        if (isDna) {
+          nucleicResidues.push({
+            resno: r.resno,
+            chain: (r.chainname || 'A').trim(),
+            resname: rname
+          });
         }
       });
 
-      if (dnaResnos.length === 0) {
-        appState.strand1Sele = 'nucleic';
-        appState.strand2Sele = '';
+      if (nucleicResidues.length === 0) {
+        appState.dnaStrandSelections = ['nucleic'];
         return;
       }
 
-      const uniqueRes = Array.from(new Set(dnaResnos)).sort((a,b) => a - b);
-      const minRes = uniqueRes[0];
-      const maxRes = uniqueRes[uniqueRes.length - 1];
-
-      let splitRes = -1;
-      if (endResnos.length > 0) {
-        splitRes = endResnos[0];
-      } else {
-        // 如果沒有 3' 標記，直接均分
-        const half = Math.floor(uniqueRes.length / 2);
-        splitRes = uniqueRes[half - 1];
+      const chainSet = new Set(nucleicResidues.map(n => n.chain));
+      if (chainSet.size >= 2) {
+        appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and nucleic`);
+        return;
       }
 
-      if (splitRes >= minRes && splitRes < maxRes) {
-        appState.strand1Sele = `nucleic and ${minRes}-${splitRes}`;
-        appState.strand2Sele = `nucleic and ${splitRes + 1}-${maxRes}`;
+      const strands = [];
+      let currentStrand = [];
+
+      for (let i = 0; i < nucleicResidues.length; i++) {
+        const curr = nucleicResidues[i];
+        currentStrand.push(curr.resno);
+
+        let isEnd = false;
+        if (curr.resname.endsWith('3')) {
+          isEnd = true;
+        } else if (i < nucleicResidues.length - 1) {
+          const next = nucleicResidues[i + 1];
+          if (next.resno - curr.resno > 1 || next.resname.endsWith('5')) {
+            isEnd = true;
+          }
+        }
+
+        if (isEnd || i === nucleicResidues.length - 1) {
+          const minRes = Math.min(...currentStrand);
+          const maxRes = Math.max(...currentStrand);
+          strands.push(`(${minRes}-${maxRes} and not protein and not resname ZN)`);
+          currentStrand = [];
+        }
+      }
+
+      if (strands.length <= 1 && nucleicResidues.length >= 4) {
+        const half = Math.floor(nucleicResidues.length / 2);
+        const s1_min = nucleicResidues[0].resno;
+        const s1_max = nucleicResidues[half - 1].resno;
+        const s2_min = nucleicResidues[half].resno;
+        const s2_max = nucleicResidues[nucleicResidues.length - 1].resno;
+        appState.dnaStrandSelections = [
+          `(${s1_min}-${s1_max} and not protein and not resname ZN)`,
+          `(${s2_min}-${s2_max} and not protein and not resname ZN)`
+        ];
       } else {
-        appState.strand1Sele = `nucleic`;
-        appState.strand2Sele = '';
+        appState.dnaStrandSelections = strands;
       }
     }
 
     /**
-     * 重建 Representation
+     * 【通用動態算法】精準空間運算：蛋白質側鏈 vs DNA 鹼基之接觸原子
+     */
+    function autoCalculateInterface(structure) {
+      const protAtoms = [];
+      const dnaAtoms = [];
+
+      structure.eachAtom(a => {
+        const rname = (a.resname || '').trim().toUpperCase();
+        const isDna = a.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
+        const isProt = a.isProtein() && !isDna && rname !== 'ZN';
+
+        if (isProt) {
+          protAtoms.push({
+            resno: a.resno,
+            x: a.x, y: a.y, z: a.z,
+            isBackbone: a.isBackbone()
+          });
+        } else if (isDna) {
+          dnaAtoms.push({
+            resno: a.resno,
+            x: a.x, y: a.y, z: a.z,
+            isBackbone: a.isBackbone()
+          });
+        }
+      });
+
+      const contactProtResnos = new Set();
+      const contactDnaResnos = new Set();
+      const cutoffSq = 3.6 * 3.6;
+
+      for (let i = 0; i < protAtoms.length; i++) {
+        const pa = protAtoms[i];
+        for (let j = 0; j < dnaAtoms.length; j++) {
+          const da = dnaAtoms[j];
+          const dx = pa.x - da.x;
+          const dy = pa.y - da.y;
+          const dz = pa.z - da.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+
+          if (distSq <= cutoffSq) {
+            contactProtResnos.add(pa.resno);
+            contactDnaResnos.add(da.resno);
+          }
+        }
+      }
+
+      const pList = Array.from(contactProtResnos);
+      const dList = Array.from(contactDnaResnos);
+
+      if (pList.length > 0) {
+        appState.contactProtSele = `(${pList.join(' or ')}) and protein and sidechain and not hydrogen`;
+      } else {
+        appState.contactProtSele = 'none';
+      }
+
+      if (dList.length > 0) {
+        appState.contactDnaSele = `(${dList.join(' or ')}) and not protein and not backbone and not hydrogen`;
+      } else {
+        appState.contactDnaSele = 'none';
+      }
+
+      if (pList.length > 0 || dList.length > 0) {
+        const combined = [...pList, ...dList];
+        appState.focusViewSele = combined.join(' or ');
+      } else {
+        appState.focusViewSele = 'nucleic';
+      }
+    }
+
+    /**
+     * 重建所有 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -415,10 +506,10 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體 (保持實心，不使用半透明避免破面鬼影)
+      // 1. 蛋白質主體
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
-          sele: 'protein',
+          sele: 'protein and not resname ZN',
           ...pColorParams,
           aspectRatio: 3.8,
           scale: 0.9,
@@ -427,58 +518,54 @@
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
-          sele: 'protein',
+          sele: 'protein and not resname ZN',
           ...pColorParams,
           radius: 0.32,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
-          sele: 'protein',
+          sele: 'protein and not resname ZN',
           ...pColorParams,
           radius: 0.2,
           multipleBond: 'off'
         });
       }
 
-      // 2. DNA 雙螺旋骨架 (第一股與第二股在物理上獨立繪製，絕不連在一起)
-      const renderStrandCartoon = (seleStr) => {
-        if (!seleStr) return;
-        appState.component.addRepresentation('cartoon', {
-          sele: seleStr,
-          ...dColorParams,
-          aspectRatio: 2.8,
-          scale: 0.85,
-          smoothSheet: true,
-          subdiv: 6
-        });
-      };
+      // 2. DNA 雙螺旋骨架 (分股獨立繪製，永不閉環)
+      const strands = appState.dnaStrandSelections.length > 0 ? appState.dnaStrandSelections : ['not protein and not resname ZN'];
 
-      if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
-        renderStrandCartoon(appState.strand1Sele);
-        if (appState.strand2Sele) {
-          renderStrandCartoon(appState.strand2Sele);
+      strands.forEach(strandSele => {
+        if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
+          appState.component.addRepresentation('cartoon', {
+            sele: strandSele,
+            ...dColorParams,
+            aspectRatio: 2.8,
+            scale: 0.85,
+            smoothSheet: true,
+            subdiv: 6
+          });
         }
-      }
+      });
 
-      // 鹼基梯級 (Ladder Blocks)
+      // 鹼基竿子 (Ladder Blocks)
       if (dRep === 'vmd_ladder') {
         appState.component.addRepresentation('base', {
-          sele: 'nucleic',
+          sele: 'not protein and not resname ZN',
           ...dColorParams
         });
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
-          sele: 'nucleic',
+          sele: 'not protein and not resname ZN',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 3. 鋅離子 (ZN)：精確限制元素為 Zn，防止多出怪球
+      // 3. 鋅離子 (ZN)：只針對 resname ZN，不亂長金屬球
       appState.component.addRepresentation('spacefill', {
-        sele: 'element Zn or resname ZN',
+        sele: 'resname ZN or resname ZN2 or resname ZINC',
         color: '#94a3b8',
         scale: 0.65
       });
@@ -486,7 +573,7 @@
       // 4. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
-          sele: 'nucleic and (.C1\' or .C1*)',
+          sele: 'not protein and not resname ZN and (.C1\' or .C1*)',
           labelType: 'resname',
           color: '#f8fafc',
           scale: 1.2,
@@ -494,32 +581,31 @@
         });
       }
 
-      // 5. 結合區特寫模式 (真正局部：只抓 WRKY 結合指環殘基 17~25，以及形成極性接觸的鹼基)
+      // 5. 結合區特寫模式：只繪製接觸側鏈與鹼基
       if (appState.isFocusingInterface) {
-        // (A) 蛋白質核心 DNA 接觸側鏈 (Arg19, Lys20, Lys24, Thr25 等 WRKYGQK 區域側鏈)
-        const pocketSidechains = 'protein and 17-26 and sidechain and not backbone';
-        appState.component.addRepresentation('licorice', {
-          sele: pocketSidechains,
-          colorScheme: 'element',
-          radius: 0.24,
-          multipleBond: 'off'
-        });
+        if (appState.contactProtSele && appState.contactProtSele !== 'none') {
+          appState.component.addRepresentation('licorice', {
+            sele: appState.contactProtSele,
+            colorScheme: 'element',
+            radius: 0.25,
+            multipleBond: 'off'
+          });
+        }
 
-        // (B) 與上述殘基有實質緊密接觸 (2.8 Å 內) 的局部鹼基
-        const pocketBases = 'nucleic and not backbone and within 2.8 of (protein and 17-26)';
-        appState.component.addRepresentation('licorice', {
-          sele: pocketBases,
-          colorScheme: 'element',
-          radius: 0.24,
-          multipleBond: 'off'
-        });
+        if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
+          appState.component.addRepresentation('licorice', {
+            sele: appState.contactDnaSele,
+            colorScheme: 'element',
+            radius: 0.25,
+            multipleBond: 'off'
+          });
+        }
 
-        // (C) 跨分子極性作用虛線
         appState.component.addRepresentation('contact', {
-          sele: 'protein and 17-26',
-          filterSele: 'nucleic',
+          sele: 'protein and not resname ZN',
+          filterSele: 'not protein and not resname ZN',
           contactType: 'polar',
-          maxDistance: 3.4,
+          maxDistance: 3.5,
           color: '#38bdf8'
         });
       }
@@ -535,8 +621,8 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        // 鏡頭平滑移至核心結合面 (殘基 17~26 與 DNA 結合處)
-        appState.component.autoView('17-26 or (nucleic and within 4.0 of (17-26))', 800);
+        const viewTarget = appState.focusViewSele || 'not protein and not resname ZN';
+        appState.component.autoView(viewTarget, 800);
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
       } else {
@@ -633,6 +719,9 @@
       lucide.createIcons();
     }
 
+    /**
+     * 載入 PDB 檔案 (支援 URL 或 File 物件)
+     */
     async function loadPdbFile(urlOrFile) {
       stopPlayback();
       const displayName = typeof urlOrFile === 'string' ? urlOrFile : urlOrFile.name;
@@ -650,8 +739,26 @@
         });
         appState.component = comp;
 
-        // 計算兩股確切的殘基範圍 (80-93 與 94-107)
-        analyzeDnaStrands(comp.structure);
+        // 更新選單顯示的檔案名稱
+        let exists = false;
+        for (let opt of dom.fileSelector.options) {
+          if (opt.textContent === displayName) {
+            opt.selected = true;
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          const newOpt = document.createElement('option');
+          newOpt.value = displayName;
+          newOpt.textContent = displayName;
+          newOpt.selected = true;
+          dom.fileSelector.appendChild(newOpt);
+        }
+
+        // 動態判定 DNA 與 Pocket
+        autoDetectDnaStrands(comp.structure);
+        autoCalculateInterface(comp.structure);
 
         applyAllRepresentations();
         comp.autoView(500);
@@ -690,18 +797,53 @@
         console.error('PDB 載入失敗:', err);
         hideLoading();
         dom.loadingText.textContent = '載入失敗: ' + displayName;
-        dom.loadingSubtext.textContent = '請檢查檔案是否存在且大小寫相符';
+        dom.loadingSubtext.textContent = '請檢查檔案是否完整';
         dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
         setTimeout(hideLoading, 3000);
       }
     }
 
     function initEvents() {
+      // 檔案選擇下拉
       dom.fileSelector.addEventListener('change', (e) => {
         loadPdbFile(e.target.value);
       });
 
-      dom.btnRefreshFiles.addEventListener('click', scanPdbFiles);
+      // 開啟本地檔案
+      dom.btnBrowseFile.addEventListener('click', () => {
+        dom.localFileInput.click();
+      });
+
+      dom.localFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          loadPdbFile(file);
+        }
+      });
+
+      // 拖曳檔案進視窗支援
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dom.dropOverlay.classList.remove('hidden');
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        if (e.relatedTarget === null) {
+          dom.dropOverlay.classList.add('hidden');
+        }
+      });
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dom.dropOverlay.classList.add('hidden');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const file = e.dataTransfer.files[0];
+          if (file.name.toLowerCase().endsWith('.pdb')) {
+            loadPdbFile(file);
+          }
+        }
+      });
+
       dom.btnPlay.addEventListener('click', togglePlay);
 
       dom.btnPrevFrame.addEventListener('click', () => {
@@ -823,7 +965,7 @@
       });
 
       initEvents();
-      scanPdbFiles();
+      scanEnvironmentFiles();
     });
   </script>
 </body>
