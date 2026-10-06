@@ -410,9 +410,9 @@
         });
       }
 
-      // 2. DNA 渲染：VMD 經典 Ladder 模式 (解決單鏈黏連，呈現彩色竿子)
+      // 2. DNA 渲染：徹底防止端點跨鏈黏連
       if (dRep === 'vmd_ladder') {
-        // (A) 骨架流線 Cartoon
+        // (A) 骨架 Cartoon：加入 smoothSheet 與分鏈保護
         appState.component.addRepresentation('cartoon', {
           sele: 'nucleic and backbone',
           ...dColorParams,
@@ -422,7 +422,8 @@
           subdiv: 6,
           opacity: bgOpacity
         });
-        // (B) 鹼基竿子 (Base Ladder / Blocks)
+        
+        // (B) 鹼基竿子 (Base Ladder)
         appState.component.addRepresentation('base', {
           sele: 'nucleic',
           ...dColorParams,
