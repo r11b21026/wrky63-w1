@@ -112,6 +112,47 @@
     </div>
   </header>
 
+  <div id="loading">載入分子軌跡中...</div>
+  <div id="viewport"></div>
+
+  <script>
+    // 建立 3D 視窗（深藍/黑底 VMD 風格）
+    var stage = new NGL.Stage("viewport", { backgroundColor: "#0b0f19" });
+
+    // 視窗大小改變時自動縮放
+    window.addEventListener("resize", function () {
+      stage.handleResize();
+    }, false);
+
+    // ★★★ 關鍵：這裡填入你 GitHub 上的 PDB 檔名 ★★★
+    var pdbFileName = "./complex_db_dry.pdb"; 
+
+    stage.loadFile(pdbFileName, { defaultRepresentation: false }).then(function (o) {
+      document.getElementById("loading").style.display = "none";
+
+      // 1. 蛋白質以卡通圖（NewCartoon）顯示
+      o.addRepresentation("cartoon", {
+        sele: "protein",
+        colorScheme: "residueindex"
+      });
+
+      // 2. DNA / 核酸以管狀（Licorice）或卡通圖顯示
+      o.addRepresentation("licorice", {
+        sele: "nucleic"
+      });
+
+      // 3. 鏡頭聚焦並置中
+      o.autoView();
+
+      // 4. 如果是多 MODEL 的軌跡檔，自動循環播放
+      var trajComp = o.addTrajectory();
+      trajComp.trajectory.player.play(); // 自動開始播放
+    }).catch(function (err) {
+      document.getElementById("loading").innerText = "載入失敗，請確認 PDB 檔名是否正確！";
+      console.error(err);
+    });
+  </script>
+  
   <div class="absolute bottom-28 left-4 z-10 flex flex-col items-center pointer-events-none">
     <canvas id="axes-canvas" width="80" height="80" class="drop-shadow-md"></canvas>
     <span class="font-mono-vmd text-[10px] text-slate-400 font-bold tracking-widest mt-[-6px]">VMD AXES</span>
