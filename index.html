@@ -147,7 +147,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_ladder" selected>VMD NewCartoon + 獨立橫竿短柱 (Ladder)</option>
+            <option value="vmd_ladder" selected>VMD NewCartoon + 圓頭短柱 (Ladder)</option>
             <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
             <option value="licorice">Licorice 全棒狀模型</option>
           </select>
@@ -155,11 +155,11 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">骨架顏色</label>
           <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="#cbd5e1" selected>經典銀白 (極力突顯內部橫竿)</option>
+            <option value="#7dd3fc" selected>VMD Cyan (經典湖水藍)</option>
+            <option value="#cbd5e1">純淨銀白 (亮灰)</option>
             <option value="resname">鹼基色同調 (A/T/C/G)</option>
             <option value="element">Element CPK (碳黃/磷橘)</option>
             <option value="#f97316">ColorID 5: 亮橘 (Orange)</option>
-            <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
           </select>
         </div>
       </div>
@@ -237,7 +237,7 @@
       protStyle: 'newcartoon',
       protColor: 'sstruc',
       dnaStyle: 'vmd_ladder',
-      dnaColor: '#cbd5e1',
+      dnaColor: '#7dd3fc',
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
@@ -357,13 +357,13 @@
     }
 
     function getColorParams(colorVal) {
-      if (!colorVal) return { color: '#cbd5e1' };
+      if (!colorVal) return { color: '#7dd3fc' };
       if (colorVal.startsWith('#')) return { color: colorVal };
       return { colorScheme: colorVal };
     }
 
     /**
-     * 動態解析結構：以骨架原子精準分股，並為各鹼基抽取獨立短柱錨點 (解法 B)
+     * 動態分析結構：短柱起點改抓核糖內側 C1'，終點取鹼基芳香環中心原子
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -378,34 +378,32 @@
 
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
-          let o3 = null, p = null, anchor = null, baseCenter = null;
+          let o3 = null, p = null, anchorC1 = null, baseRing = null;
 
           r.eachAtom(a => {
             const aname = a.atomname.trim();
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
             if (aname === "P") p = { x: a.x, y: a.y, z: a.z };
 
-            // 骨架錨點：優先取 P，若 5' 端無磷酸根則取 O5'/C5'
-            if (aname === "P") {
-              anchor = a.index;
-            } else if (!anchor && (aname === "O5'" || aname === "O5*" || aname === "C5'" || aname === "C5*")) {
-              anchor = a.index;
+            // 1. 骨架起點：嚴格取核糖內側 C1'，保證從骨架內緣發出，絕不穿透外部彩帶
+            if (aname === "C1'" || aname === "C1*") {
+              anchorC1 = a.index;
             }
 
-            // 鹼基指向中心：嘌呤取 N1，嘧啶取 N3；若無則取 C1'
-            if (aname === "N1" || aname === "N3") {
-              baseCenter = a.index;
-            } else if (!baseCenter && (aname === "C1'" || aname === "C1*")) {
-              baseCenter = a.index;
+            // 2. 鹼基指向中心：取環的核心中心原子 (N1/N3/C4)
+            if (aname === "N1" || aname === "N3" || aname === "C4") {
+              if (!baseRing || aname === "N1" || aname === "N3") {
+                baseRing = a.index;
+              }
             }
           });
 
-          // 保底錨點防呆
-          if (!anchor) {
-            r.eachAtom(a => { if (!anchor) anchor = a.index; });
+          // 保底防呆
+          if (!anchorC1) {
+            r.eachAtom(a => { if (!anchorC1) anchorC1 = a.index; });
           }
-          if (!baseCenter) {
-            r.eachAtom(a => { if (!baseCenter) baseCenter = a.index; });
+          if (!baseRing) {
+            baseRing = anchorC1;
           }
 
           nucleicResList.push({
@@ -413,8 +411,8 @@
             chain: (r.chainname || 'A').trim(),
             resname: rname,
             o3: o3, p: p,
-            anchorIndex: anchor,
-            baseCenterIndex: baseCenter
+            c1Index: anchorC1,
+            ringIndex: baseRing
           });
         }
       });
@@ -459,10 +457,10 @@
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // 解法 B：每個鹼基獨立產生短柱 (Stubs)，支援動態解離散開
+      // 每個殘基各自獨立伸出短柱 (Stubs)，支援動態解離散開
       appState.dnaRungStubs = nucleicResList.map(item => ({
-        anchor: item.anchorIndex,
-        baseCenter: item.baseCenterIndex,
+        anchor: item.c1Index,
+        target: item.ringIndex,
         resname: item.resname
       }));
 
@@ -513,7 +511,7 @@
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
 
-      // 清理舊幾何形狀
+      // 清除舊幾何形狀
       if (appState.ladderShapeComp) {
         appState.stage.removeComponent(appState.ladderShapeComp);
         appState.ladderShapeComp = null;
@@ -552,7 +550,7 @@
         });
       }
 
-      // 2. DNA 雙螺旋絲帶 (分股獨立繪製，永不相連閉環)
+      // 2. DNA 雙螺旋絲帶
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -568,49 +566,53 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (解法 B：各鹼基獨立實心短柱，支援動態熱擾動解離)
+      // 3. DNA 階梯橫竿 (VMD 原生膠囊短柱：從 C1' 出發不刺穿骨架，端點圓弧閉合)
       if (dRep === 'vmd_ladder') {
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
-          const shape = new NGL.Shape("dna_ladder_stubs");
+          const shape = new NGL.Shape("vmd_rungs");
           const structure = appState.component.structure;
 
-          // 核心鹼基配色盤 (RGB 比例)
+          // VMD 經典鹼基專屬配色 (RGB 比例)
           const baseColorPalette = {
-            'A': [0.95, 0.25, 0.25], // 紅色
-            'T': [0.25, 0.85, 0.35], // 綠色
-            'C': [0.25, 0.50, 0.95], // 藍色
-            'G': [0.95, 0.80, 0.15], // 黃色
-            'U': [0.85, 0.25, 0.85]  // 桃紅
+            'A': [0.22, 0.35, 0.95], // 鮮藍
+            'T': [0.92, 0.28, 0.35], // 鮮紅/粉紅
+            'C': [0.95, 0.58, 0.20], // 暖橘
+            'G': [0.15, 0.80, 0.25], // 鮮綠
+            'U': [0.92, 0.28, 0.35]
           };
 
-          // 鹼基名稱正規化：過濾 DA, DA5, DA3, DT, DC, DG 等末端命名差異
           const parseBaseColor = (rname) => {
             const raw = (rname || '').trim().toUpperCase();
             const clean = raw.replace(/^D/, '').replace(/[35]$/, '');
             return baseColorPalette[clean] || [0.8, 0.84, 0.89];
           };
 
+          // 幾何參數：半徑 0.36 Å (具分量感)，長度 3.45 Å (端點剛好抵達環中心配對面)
+          const stubRadius = 0.36;
+          const stubLength = 3.45;
+
           appState.dnaRungStubs.forEach(stub => {
             const aStart = structure.getAtomProxy(stub.anchor);
-            const aEnd = structure.getAtomProxy(stub.baseCenter);
+            const aEnd = structure.getAtomProxy(stub.target);
 
             if (aStart && aEnd) {
               const color = parseBaseColor(stub.resname);
 
-              // 向量延伸：從骨架錨點朝向鹼基配對中心延伸約 5.2 Å (雙螺旋半徑)，配對時兩端短柱在軸心碰頭
               const dx = aEnd.x - aStart.x;
               const dy = aEnd.y - aStart.y;
               const dz = aEnd.z - aStart.z;
               const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
               if (dist > 0.1) {
-                const targetLen = 5.2;
-                const scale = targetLen / dist;
+                const scale = stubLength / dist;
                 const tipX = aStart.x + dx * scale;
                 const tipY = aStart.y + dy * scale;
                 const tipZ = aStart.z + dz * scale;
 
-                shape.addCylinder([aStart.x, aStart.y, aStart.z], [tipX, tipY, tipZ], color, 0.22);
+                // 實心圓柱本體
+                shape.addCylinder([aStart.x, aStart.y, aStart.z], [tipX, tipY, tipZ], color, stubRadius);
+                // 末端圓球 (做出 VMD 標誌性的 Rounded Cap 圓潤倒角)
+                shape.addSphere([tipX, tipY, tipZ], color, stubRadius);
               }
             }
           });
@@ -714,7 +716,7 @@
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
 
-      // 動畫播放更新影格時，同步重繪短柱座標
+      // 動畫切換影格時同步更新短柱
       if (appState.dnaStyle === 'vmd_ladder') {
         applyAllRepresentations();
       }
