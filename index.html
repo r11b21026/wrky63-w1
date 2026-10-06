@@ -116,12 +116,6 @@
         <span class="hidden sm:inline">樣式設定</span>
       </button>
 
-      <!-- 本機上傳備用按鈕 -->
-      <button id="btn-open-file" title="上傳電腦或手機本地 PDB" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition">
-        <i data-lucide="upload" class="w-4 h-4"></i>
-        <span class="hidden sm:inline">上傳</span>
-      </button>
-
       <!-- 重設視角 (r) -->
       <button id="btn-reset-view" title="重設鏡頭視角置中 (鍵盤 R)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="focus" class="w-4 h-4"></i>
@@ -154,32 +148,27 @@
 
     <!-- 繪製樣式 -->
     <div class="mb-4">
-      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">Drawing Method (繪圖模式)</label>
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">蛋白質繪圖模式 (Protein Method)</label>
       <div class="grid grid-cols-2 gap-1.5">
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon 卡通</button>
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice 管狀</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="surface">QuickSurf 表面</button>
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="spacefill">VDW 凡德瓦球體</button>
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="ribbon">Ribbon 絲帶</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="trace">Trace 軌跡線</button>
       </div>
     </div>
 
     <!-- 配色方案 -->
     <div class="mb-3">
-      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">Coloring Method (著色規則)</label>
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">著色規則 (Coloring Method)</label>
       <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
         <option value="sstruc" selected>ResType / 二級結構 (Secondary Structure)</option>
         <option value="chainid">Chain ID 鏈編號</option>
         <option value="resname">Residue Name 殘基類型</option>
         <option value="element">Element (CPK 原子顏色)</option>
         <option value="residueindex">Residue Index 漸層彩虹</option>
-        <option value="hydrophobicity">Hydrophobicity 疏水性</option>
       </select>
     </div>
   </div>
-
-  <input type="file" id="file-input-local" accept=".pdb,.ent,.cif" class="hidden" />
 
   <!-- 底部 VMD Animate 播放控制器 -->
   <footer class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
@@ -240,7 +229,7 @@
     </div>
   </footer>
 
-  <!-- 繁體中文說明對話框 -->
+  <!-- 說明對話框 -->
   <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="vmd-panel max-w-md w-full rounded-2xl p-5 shadow-2xl border border-slate-700">
       <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
@@ -278,15 +267,19 @@
       'traj_light.pdb',
       'trajectory.pdb',
       'model.pdb',
-      'complex.pdb',
-      'snapshot.pdb',
-      'output.pdb'
+      'complex.pdb'
     ];
 
     const appState = {
       stage: null,
       component: null,
       trajComp: null,
+      // 各獨立圖層指標 (防止重複堆疊)
+      protRep: null,
+      dnaRep: null,
+      znRep: null,
+      coordRep: null,
+      
       totalFrames: 1,
       currentFrame: 0,
       isPlaying: false,
@@ -326,8 +319,6 @@
       btnToggleRep: document.getElementById('btn-toggle-rep'),
       repModal: document.getElementById('rep-modal'),
       btnCloseRep: document.getElementById('btn-close-rep'),
-      btnOpenFile: document.getElementById('btn-open-file'),
-      fileInputLocal: document.getElementById('file-input-local'),
       btnInfo: document.getElementById('btn-info'),
       infoModal: document.getElementById('info-modal'),
       btnCloseInfo: document.getElementById('btn-close-info'),
@@ -390,7 +381,7 @@
         dom.fileSelector.value = found[0].url;
         loadPdbFile(found[0].url);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案 (請點右上上傳)</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案</option>';
       }
     }
 
@@ -406,16 +397,24 @@
       });
     }
 
-    function applyRepresentations() {
+    /**
+     * 只抽換「蛋白質主體」圖層，絕不疊加，且 DNA 與鋅離子不會被洗掉
+     */
+    function updateProteinRepresentation() {
       if (!appState.component) return;
-      appState.component.removeAllRepresentations();
+
+      // 如果先前已經有蛋白質圖層，精準單獨移除
+      if (appState.protRep) {
+        appState.component.removeRepresentation(appState.protRep);
+        appState.protRep = null;
+      }
 
       const rep = appState.repStyle;
       const color = appState.colorScheme;
 
-      // 1. 蛋白質主體
+      // 建立新的單一蛋白質圖層
       if (rep === 'cartoon') {
-        appState.component.addRepresentation('cartoon', {
+        appState.protRep = appState.component.addRepresentation('cartoon', {
           sele: 'protein',
           colorScheme: color,
           aspectRatio: 3.2,
@@ -423,69 +422,65 @@
           smoothSheet: true
         });
       } else if (rep === 'licorice') {
-        appState.component.addRepresentation('licorice', {
+        appState.protRep = appState.component.addRepresentation('licorice', {
           sele: 'protein',
           colorScheme: color,
           radius: 0.22
         });
-      } else if (rep === 'surface') {
-        appState.component.addRepresentation('surface', {
-          sele: 'protein',
-          colorScheme: color,
-          surfaceType: 'ms',
-          opacity: 0.85
-        });
       } else if (rep === 'spacefill') {
-        appState.component.addRepresentation('spacefill', {
+        appState.protRep = appState.component.addRepresentation('spacefill', {
           sele: 'protein',
           colorScheme: color,
           scale: 0.85
         });
       } else if (rep === 'ribbon') {
-        appState.component.addRepresentation('ribbon', {
+        appState.protRep = appState.component.addRepresentation('ribbon', {
           sele: 'protein',
           colorScheme: color,
           scale: 1.4
         });
-      } else if (rep === 'trace') {
-        appState.component.addRepresentation('trace', {
-          sele: 'protein',
-          colorScheme: color,
-          subdiv: 12
-        });
       }
-
-      // 2. DNA / 核酸自動配管狀 Licorice
-      appState.component.addRepresentation('licorice', {
-        sele: 'nucleic',
-        colorScheme: 'element',
-        radius: 0.22
-      });
-
-      // 3. 鋅離子 (ZN)：顯眼的銀灰色金屬大球體 (VDW)
-      appState.component.addRepresentation('spacefill', {
-        sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
-        color: '#9ca3af',
-        scale: 1.3
-      });
-
-      // 4. 鋅指配位環境：周圍 3.2 Å 內側鏈以棒狀高亮
-      appState.component.addRepresentation('licorice', {
-        sele: 'within 3.2 of (@ZN or @ZN2 or :ZN or :ZN2 or zinc)',
-        colorScheme: 'element',
-        radius: 0.2
-      });
-
-      // 5. 雜原子與輔因子 (CPK 球體)
-      appState.component.addRepresentation('spacefill', {
-        sele: 'hetero and not (water or ion or @ZN or @ZN2 or :ZN or :ZN2)',
-        scale: 0.65,
-        colorScheme: 'element'
-      });
     }
 
     /**
-     * 載入 PDB 檔案並掛載動畫 Trajectory (修復異步讀取問題)
+     * 檔案剛載入時建立固定輔助圖層 (DNA + 鋅球 + 配位殘基)
+     */
+    function setupBaseRepresentations() {
+      if (!appState.component) return;
+
+      // 1. DNA 棒狀 (Licorice)
+      if (!appState.dnaRep) {
+        appState.dnaRep = appState.component.addRepresentation('licorice', {
+          sele: 'nucleic',
+          colorScheme: 'element',
+          radius: 0.22
+        });
+      }
+
+      // 2. 鋅離子金屬大球體 (VDW Sphere)
+      if (!appState.znRep) {
+        appState.znRep = appState.component.addRepresentation('spacefill', {
+          sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
+          color: '#9ca3af',
+          scale: 1.3
+        });
+      }
+
+      // 3. 鋅指配位殘基側鏈 (Cys / His 棒狀圖)
+      if (!appState.coordRep) {
+        appState.coordRep = appState.component.addRepresentation('licorice', {
+          sele: 'within 3.2 of (@ZN or @ZN2 or :ZN or :ZN2 or zinc)',
+          colorScheme: 'element',
+          radius: 0.2
+        });
+      }
+
+      // 4. 繪製蛋白質主體
+      updateProteinRepresentation();
+    }
+
+    /**
+     * 載入 PDB 檔案
      */
     async function loadPdbFile(urlOrFile) {
       stopPlayback();
@@ -494,29 +489,32 @@
 
       try {
         appState.stage.removeAllComponents();
+        appState.protRep = null;
+        appState.dnaRep = null;
+        appState.znRep = null;
+        appState.coordRep = null;
 
         const comp = await appState.stage.loadFile(urlOrFile, { defaultRepresentation: false });
         appState.component = comp;
 
-        applyRepresentations();
+        // 建立圖層
+        setupBaseRepresentations();
         comp.autoView(500);
 
-        // 更新原子數量
         const atomTotal = comp.structure.atomCount || 0;
         dom.atomCount.textContent = atomTotal.toLocaleString();
 
-        // 掛載 Trajectory 組件並監聽實際解析完成的影格總數
+        // 綁定 Trajectory
         const traj = comp.addTrajectory();
         appState.trajComp = traj;
 
-        // 當 NGL 正式解析完軌跡影格時觸發
         traj.trajectory.signals.countChanged.add(function (count) {
           if (count > 1) {
             appState.totalFrames = count;
             dom.slider.max = count - 1;
             dom.sliderTotal.textContent = String(count - 1);
             setFrame(0);
-            startPlayback(); // 多影格自動開始播放
+            startPlayback();
           } else {
             appState.totalFrames = 1;
             dom.slider.max = 0;
@@ -527,7 +525,6 @@
           }
         });
 
-        // 保底檢查：如果 count 已經可用
         const initCount = traj.trajectory.frameCount || 1;
         if (initCount > 1) {
           appState.totalFrames = initCount;
@@ -736,6 +733,7 @@
         dom.repModal.classList.add('hidden');
       });
 
+      // ★★★ 關鍵：切換樣式時只精準抽換蛋白質主體，絕不疊加 ★★★
       document.querySelectorAll('.rep-style-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.rep-style-btn').forEach(b => {
@@ -746,27 +744,14 @@
           btn.classList.remove('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
 
           appState.repStyle = btn.dataset.rep;
-          applyRepresentations();
+          updateProteinRepresentation();
         });
       });
 
+      // ★★★ 關鍵：切換配色時同步更新蛋白質 ★★★
       dom.colorSelect.addEventListener('change', (e) => {
         appState.colorScheme = e.target.value;
-        applyRepresentations();
-      });
-
-      dom.btnOpenFile.addEventListener('click', () => dom.fileInputLocal.click());
-      dom.fileInputLocal.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const opt = document.createElement('option');
-        opt.value = file.name;
-        opt.textContent = `本機: ${file.name}`;
-        dom.fileSelector.prepend(opt);
-        dom.fileSelector.value = file.name;
-
-        loadPdbFile(file);
+        updateProteinRepresentation();
       });
 
       dom.btnInfo.addEventListener('click', () => dom.infoModal.classList.remove('hidden'));
