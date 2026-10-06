@@ -47,19 +47,6 @@
       accent-color: #38bdf8;
     }
 
-    input[type=range]::-webkit-slider-thumb {
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
-    }
-
-    ::-webkit-scrollbar {
-      width: 4px;
-      height: 4px;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(56, 189, 248, 0.4);
-      border-radius: 4px;
-    }
-
     #axes-canvas {
       pointer-events: none;
     }
@@ -82,7 +69,7 @@
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-    <!-- 左側：結構選單 (只列出同資料夾 PDB) -->
+    <!-- 左側：結構選單 -->
     <div class="vmd-panel rounded-xl px-3 py-2 flex items-center space-x-2.5 pointer-events-auto shadow-lg max-w-full">
       <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2.5">
         <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
@@ -169,7 +156,7 @@
   </div>
 
   <!-- 底部 VMD Animate 播放控制器 -->
-  <footer id="bottom-bar" class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
+  <footer id="bottom-bar" class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center transition-all duration-300">
     <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
       
       <!-- 軌跡時間軸拉桿 -->
@@ -201,7 +188,7 @@
 
           <!-- 播放 / 暫停按鈕 -->
           <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停">
-            <i id="play-icon" data-lucide="pause" class="w-5 h-5 fill-current"></i>
+            <i id="play-icon" data-lucide="play" class="w-5 h-5 fill-current"></i>
           </button>
 
           <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格">
@@ -213,7 +200,6 @@
           </button>
         </div>
 
-        <!-- 步進跳轉指示 -->
         <div class="font-mono-vmd text-xs text-slate-400 hidden sm:block">
           MD Trajectory
         </div>
@@ -260,10 +246,11 @@
       stage: null,
       component: null,
       trajPlayer: null,
+      trajectory: null,
       totalFrames: 1,
       currentFrame: 0,
       isPlaying: false,
-      loopMode: 'loop', // 'loop', 'rock', 'once'
+      loopMode: 'loop',
       repStyle: 'cartoon',
       colorScheme: 'residueindex'
     };
@@ -283,436 +270,4 @@
       slider: document.getElementById('trajectory-slider'),
       sliderCurr: document.getElementById('slider-curr-frame'),
       sliderTotal: document.getElementById('slider-total-frame'),
-      btnPlay: document.getElementById('btn-play'),
-      btnPrevFrame: document.getElementById('btn-prev-frame'),
-      btnNextFrame: document.getElementById('btn-next-frame'),
-      btnFirstFrame: document.getElementById('btn-first-frame'),
-      btnLastFrame: document.getElementById('btn-last-frame'),
-      btnLoopMode: document.getElementById('btn-loop-mode'),
-      loopLabel: document.getElementById('loop-label'),
-      colorSelect: document.getElementById('color-select'),
-      btnResetView: document.getElementById('btn-reset-view'),
-      btnToggleRep: document.getElementById('btn-toggle-rep'),
-      repModal: document.getElementById('rep-modal'),
-      btnCloseRep: document.getElementById('btn-close-rep'),
-      btnInfo: document.getElementById('btn-info'),
-      infoModal: document.getElementById('info-modal'),
-      btnCloseInfo: document.getElementById('btn-close-info'),
-      axesCanvas: document.getElementById('axes-canvas')
-    };
-
-    function showLoading(title, sub = '') {
-      dom.loadingText.textContent = title;
-      dom.loadingSubtext.textContent = sub;
-      dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
-    }
-
-    function hideLoading() {
-      dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
-    }
-
-    /**
-     * 只掃描同資料夾 / 同 Repo 下真實存在的 PDB
-     */
-    async function scanPdbFiles() {
-      showLoading('掃描目錄中...', '尋找同資料夾 PDB');
-      let found = [];
-
-      const hostname = window.location.hostname;
-      const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
-      const isGitHubPages = hostname.endsWith('github.io');
-
-      // 1. 在 GitHub Pages 環境：透過 GitHub API 列出同目錄下的所有 .pdb
-      if (isGitHubPages && pathname) {
-        const parts = pathname.split('/');
-        const repo = parts[0];
-        const owner = hostname.split('.')[0];
-        try {
-          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data)) {
-              found = data
-                .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
-                .map(item => ({ name: item.name, url: `./${item.name}` }));
-            }
-          }
-        } catch (e) {
-          console.warn('GitHub API 未能讀取清單，改用同目錄探測:', e);
-        }
-      }
-
-      // 2. 本地測試或 API 未取到：只探測 traj_light.pdb
-      if (found.length === 0) {
-        try {
-          const r = await fetch('./traj_light.pdb', { method: 'HEAD' });
-          if (r.ok) found.push({ name: 'traj_light.pdb', url: './traj_light.pdb' });
-        } catch (e) {}
-      }
-
-      dom.fileSelector.innerHTML = '';
-
-      if (found.length > 0) {
-        found.forEach(f => {
-          const opt = document.createElement('option');
-          opt.value = f.url;
-          opt.textContent = f.name;
-          dom.fileSelector.appendChild(opt);
-        });
-        hideLoading();
-        loadPdbFile(found[0].url);
-      } else {
-        dom.fileSelector.innerHTML = '<option value="./traj_light.pdb">traj_light.pdb</option>';
-        hideLoading();
-        loadPdbFile('./traj_light.pdb');
-      }
-    }
-
-    /**
-     * 繪製 Representation (包含蛋白質、DNA、鋅球與配位殘基)
-     */
-    function applyRepresentations() {
-      if (!appState.component) return;
-      appState.component.removeAllRepresentations();
-
-      const rep = appState.repStyle;
-      const color = appState.colorScheme;
-
-      // 1. 蛋白質主體
-      if (rep === 'cartoon') {
-        appState.component.addRepresentation('cartoon', {
-          sele: 'protein',
-          colorScheme: color,
-          aspectRatio: 3.5,
-          scale: 0.85
-        });
-      } else if (rep === 'licorice') {
-        appState.component.addRepresentation('licorice', {
-          sele: 'protein',
-          colorScheme: color,
-          radius: 0.22
-        });
-      } else if (rep === 'spacefill') {
-        appState.component.addRepresentation('spacefill', {
-          sele: 'protein',
-          colorScheme: color,
-          scale: 0.85
-        });
-      } else if (rep === 'ribbon') {
-        appState.component.addRepresentation('ribbon', {
-          sele: 'protein',
-          colorScheme: color,
-          scale: 1.4
-        });
-      }
-
-      // 2. DNA / 核酸以 Licorice 棒狀圖顯示
-      appState.component.addRepresentation('licorice', {
-        sele: 'nucleic',
-        colorScheme: 'element',
-        radius: 0.24
-      });
-
-      // 3. 鋅離子 (ZN)：顯眼的銀灰色金屬大球體 (VDW)
-      appState.component.addRepresentation('spacefill', {
-        sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
-        color: '#9ca3af',
-        scale: 1.3
-      });
-
-      // 4. 鋅指配位環境：周圍 3.2 Å 內側鏈以棒狀高亮
-      appState.component.addRepresentation('licorice', {
-        sele: 'within 3.2 of (@ZN or @ZN2 or :ZN or :ZN2 or zinc)',
-        colorScheme: 'element',
-        radius: 0.2
-      });
-
-      // 5. 保底顯示：避免選取條件沒對齊而全黑
-      appState.component.addRepresentation('cartoon', {
-        sele: '*',
-        colorScheme: 'chainindex',
-        opacity: 0.2
-      });
-    }
-
-    /**
-     * 載入 PDB 檔案並啟動原生 Trajectory 播放器
-     */
-    async function loadPdbFile(url) {
-      if (appState.trajPlayer) {
-        appState.trajPlayer.pause();
-        appState.trajPlayer = null;
-      }
-
-      const fileName = url.replace(/^.*[\\\/]/, '');
-      showLoading('正在讀取結構軌跡...', fileName);
-
-      try {
-        appState.stage.removeAllComponents();
-
-        const comp = await appState.stage.loadFile(url, { defaultRepresentation: false });
-        appState.component = comp;
-
-        applyRepresentations();
-
-        // 確保鏡頭自動縮放置中
-        setTimeout(() => {
-          comp.autoView(500);
-        }, 80);
-
-        // 讀取原子數
-        const atomTotal = comp.structure.atomCount || 0;
-        dom.atomCount.textContent = atomTotal.toLocaleString();
-
-        // 掛載 Trajectory
-        const trajComp = comp.addTrajectory();
-        const trajectory = trajComp.trajectory;
-
-        // 監聽影格總數確認
-        trajectory.signals.countChanged.add(function (count) {
-          appState.totalFrames = count;
-          dom.slider.max = count - 1;
-          dom.sliderTotal.textContent = String(count - 1);
-          dom.frameCounter.textContent = `1 / ${count}`;
-        });
-
-        // 監聽影格變更並同步時間軸拉桿
-        trajectory.signals.frameChanged.add(function (frame) {
-          appState.currentFrame = frame;
-          dom.slider.value = frame;
-          dom.sliderCurr.textContent = frame;
-          dom.frameCounter.textContent = `${frame + 1} / ${appState.totalFrames}`;
-        });
-
-        // 啟動原生動畫播放器
-        appState.trajPlayer = trajectory.player;
-        appState.trajPlayer.mode = appState.loopMode; // 'loop', 'rock', 'once'
-        appState.trajPlayer.timeout = 50; // 播放速度 (約 20 fps)
-        
-        appState.trajPlayer.play();
-        appState.isPlaying = true;
-        updatePlayButtonIcon(true);
-        dom.bottomBar.style.display = 'flex';
-
-        hideLoading();
-      } catch (err) {
-        console.error('載入失敗:', err);
-        hideLoading();
-        dom.loadingText.textContent = '載入失敗: ' + fileName;
-        dom.loadingSubtext.textContent = '請確認該檔案是否存在於同一目錄';
-        dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
-        setTimeout(hideLoading, 3000);
-      }
-    }
-
-    function updatePlayButtonIcon(playing) {
-      const icon = dom.btnPlay.querySelector('i');
-      if (!icon) return;
-      icon.setAttribute('data-lucide', playing ? 'pause' : 'play');
-      lucide.createIcons();
-    }
-
-    function togglePlay() {
-      if (!appState.trajPlayer) return;
-      if (appState.isPlaying) {
-        appState.trajPlayer.pause();
-        appState.isPlaying = false;
-        updatePlayButtonIcon(false);
-      } else {
-        appState.trajPlayer.play();
-        appState.isPlaying = true;
-        updatePlayButtonIcon(true);
-      }
-    }
-
-    /**
-     * VMD 座標軸追蹤繪製
-     */
-    function drawVmdAxes() {
-      const canvas = dom.axesCanvas;
-      if (!canvas || !appState.stage) return;
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const rot = appState.stage.viewerControls.getOrientation();
-      const r00 = rot[0], r01 = rot[1], r02 = rot[2];
-      const r10 = rot[4], r11 = rot[5], r12 = rot[6];
-      const r20 = rot[8], r21 = rot[9], r22 = rot[10];
-
-      const cX = w / 2;
-      const cY = h / 2;
-      const length = 26;
-
-      const axes = [
-        { label: 'X', color: '#ef4444', x: r00 * length, y: -r01 * length, z: r02 },
-        { label: 'Y', color: '#22c55e', x: r10 * length, y: -r11 * length, z: r12 },
-        { label: 'Z', color: '#38bdf8', x: r20 * length, y: -r21 * length, z: r22 }
-      ];
-
-      axes.sort((a, b) => a.z - b.z);
-
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.font = 'bold 10px JetBrains Mono, monospace';
-
-      axes.forEach(axis => {
-        ctx.strokeStyle = axis.color;
-        ctx.fillStyle = axis.color;
-
-        ctx.beginPath();
-        ctx.moveTo(cX, cY);
-        const endX = cX + axis.x;
-        const endY = cY + axis.y;
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        const offset = 6;
-        const mag = Math.sqrt(axis.x * axis.x + axis.y * axis.y) || 1;
-        const lx = endX + (axis.x / mag) * offset;
-        const ly = endY + (axis.y / mag) * offset + 3;
-
-        ctx.fillText(axis.label, lx - 3, ly);
-      });
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.arc(cX, cY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    function initEvents() {
-      dom.fileSelector.addEventListener('change', (e) => {
-        loadPdbFile(e.target.value);
-      });
-
-      dom.btnRefreshFiles.addEventListener('click', scanPdbFiles);
-
-      dom.btnPlay.addEventListener('click', togglePlay);
-
-      dom.btnPrevFrame.addEventListener('click', () => {
-        if (!appState.trajPlayer) return;
-        appState.trajPlayer.pause();
-        appState.isPlaying = false;
-        updatePlayButtonIcon(false);
-        const prev = Math.max(0, appState.currentFrame - 1);
-        appState.trajPlayer.trajectory.setFrame(prev);
-      });
-
-      dom.btnNextFrame.addEventListener('click', () => {
-        if (!appState.trajPlayer) return;
-        appState.trajPlayer.pause();
-        appState.isPlaying = false;
-        updatePlayButtonIcon(false);
-        const next = Math.min(appState.totalFrames - 1, appState.currentFrame + 1);
-        appState.trajPlayer.trajectory.setFrame(next);
-      });
-
-      dom.btnFirstFrame.addEventListener('click', () => {
-        if (!appState.trajPlayer) return;
-        appState.trajPlayer.trajectory.setFrame(0);
-      });
-
-      dom.btnLastFrame.addEventListener('click', () => {
-        if (!appState.trajPlayer) return;
-        appState.trajPlayer.trajectory.setFrame(appState.totalFrames - 1);
-      });
-
-      dom.slider.addEventListener('input', (e) => {
-        if (!appState.trajPlayer) return;
-        if (appState.isPlaying) {
-          appState.trajPlayer.pause();
-          appState.isPlaying = false;
-          updatePlayButtonIcon(false);
-        }
-        appState.trajPlayer.trajectory.setFrame(parseInt(e.target.value, 10));
-      });
-
-      dom.btnLoopMode.addEventListener('click', () => {
-        if (!appState.trajPlayer) return;
-        if (appState.loopMode === 'loop') {
-          appState.loopMode = 'rock';
-          dom.loopLabel.textContent = '往返 (ROCK)';
-        } else if (appState.loopMode === 'rock') {
-          appState.loopMode = 'once';
-          dom.loopLabel.textContent = '單次 (ONCE)';
-        } else {
-          appState.loopMode = 'loop';
-          dom.loopLabel.textContent = '循環 (LOOP)';
-        }
-        appState.trajPlayer.mode = appState.loopMode;
-      });
-
-      dom.btnResetView.addEventListener('click', () => {
-        if (appState.component) appState.component.autoView(500);
-      });
-
-      dom.btnToggleRep.addEventListener('click', () => {
-        dom.repModal.classList.toggle('hidden');
-      });
-      dom.btnCloseRep.addEventListener('click', () => {
-        dom.repModal.classList.add('hidden');
-      });
-
-      document.querySelectorAll('.rep-style-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.rep-style-btn').forEach(b => {
-            b.classList.remove('border-cyan-500/40', 'bg-cyan-500/15', 'text-cyan-300');
-            b.classList.add('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
-          });
-          btn.classList.add('border-cyan-500/40', 'bg-cyan-500/15', 'text-cyan-300');
-          btn.classList.remove('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
-
-          appState.repStyle = btn.dataset.rep;
-          applyRepresentations();
-        });
-      });
-
-      dom.colorSelect.addEventListener('change', (e) => {
-        appState.colorScheme = e.target.value;
-        applyRepresentations();
-      });
-
-      dom.btnInfo.addEventListener('click', () => dom.infoModal.classList.remove('hidden'));
-      dom.btnCloseInfo.addEventListener('click', () => dom.infoModal.classList.add('hidden'));
-
-      window.addEventListener('keydown', (e) => {
-        if (['INPUT', 'SELECT'].includes(e.target.tagName)) return;
-        if (e.code === 'Space') {
-          e.preventDefault();
-          togglePlay();
-        } else if (e.code === 'ArrowRight') {
-          dom.btnNextFrame.click();
-        } else if (e.code === 'ArrowLeft') {
-          dom.btnPrevFrame.click();
-        } else if (e.key === 'r' || e.key === 'R') {
-          if (appState.component) appState.component.autoView(400);
-        }
-      });
-    }
-
-    window.addEventListener('load', () => {
-      appState.stage = new NGL.Stage('viewport', {
-        backgroundColor: '#0b0f19',
-        cameraType: 'perspective',
-        ambientColor: 0xffffff,
-        ambientIntensity: 0.5,
-        lightColor: 0xffffff,
-        lightIntensity: 0.9
-      });
-
-      window.addEventListener('resize', () => {
-        appState.stage.handleResize();
-        drawVmdAxes();
-      });
-
-      appState.stage.viewerControls.signals.changed.add(drawVmdAxes);
-
-      initEvents();
-      scanPdbFiles();
-      setInterval(drawVmdAxes, 60);
-    });
-  </script>
-</body>
-</html>
+      btnPlay: document.getElementById('
