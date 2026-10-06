@@ -76,10 +76,9 @@
         <span class="font-mono-vmd font-bold text-xs sm:text-sm tracking-wider text-cyan-400">VMD-WEB</span>
       </div>
 
-      <!-- 檔案切換下拉選單 -->
       <div class="flex items-center space-x-1.5">
         <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400"></i>
-        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[170px] sm:max-w-[280px] truncate cursor-pointer hover:bg-slate-800 transition">
+        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[160px] sm:max-w-[260px] truncate cursor-pointer hover:bg-slate-800 transition">
           <option value="" disabled selected>偵測 PDB 檔案中...</option>
         </select>
         <button id="btn-refresh-files" title="重新掃描資料夾" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
@@ -91,25 +90,25 @@
     <!-- 右側：HUD 數據面板與功能按鍵 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
       
-      <!-- 統計數據 -->
-      <div class="vmd-panel hidden md:flex items-center space-x-3.5 px-3 py-2 rounded-xl font-mono-vmd text-xs text-slate-300">
-        <div><span class="text-slate-500">原子數:</span> <span id="atom-count" class="text-slate-200">--</span></div>
-        <div><span class="text-slate-500">影格:</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
-      </div>
+      <!-- 一鍵特寫結合介面按鈕 -->
+      <button id="btn-focus-interface" title="一鍵特寫蛋白質與 DNA 結合 Pocket" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 hover:text-cyan-200 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition shadow-lg shadow-cyan-500/10">
+        <i data-lucide="zoom-in" class="w-4 h-4 text-cyan-400"></i>
+        <span class="hidden sm:inline">結合區特寫</span>
+      </button>
 
       <!-- 渲染樣式選單開關 -->
-      <button id="btn-toggle-rep" title="幾何樣式與配色" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
+      <button id="btn-toggle-rep" title="幾何樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
         <i data-lucide="palette" class="w-4 h-4"></i>
         <span class="hidden sm:inline">樣式設定</span>
       </button>
 
-      <!-- 重設視角 -->
-      <button id="btn-reset-view" title="重設鏡頭視角置中 (鍵盤 R)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
+      <!-- 重設全局視角 -->
+      <button id="btn-reset-view" title="重設整體視角 (R 鍵)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="focus" class="w-4 h-4"></i>
       </button>
       
       <!-- 說明對話框 -->
-      <button id="btn-info" title="手勢與操作說明" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
+      <button id="btn-info" title="手勢說明" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="help-circle" class="w-4 h-4"></i>
       </button>
     </div>
@@ -122,55 +121,55 @@
   </div>
 
   <!-- 幾何顯示與配色面板 -->
-  <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-80 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
+  <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-84 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
     <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
       <div class="flex items-center space-x-2">
         <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
-        <h3 class="text-sm font-semibold text-slate-100">分子繪製樣式 (Representations)</h3>
+        <h3 class="text-sm font-semibold text-slate-100">樣式與著色調校</h3>
       </div>
       <button id="btn-close-rep" class="text-slate-400 hover:text-white">
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
     </div>
 
-    <!-- 蛋白質樣式 -->
+    <!-- 蛋白質樣式清單 -->
     <div class="mb-3">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">蛋白質樣式 (Protein Style)</label>
       <div class="grid grid-cols-2 gap-1.5">
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon 卡通</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice 管狀</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="spacefill">VDW 凡德瓦球體</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="ribbon">Ribbon 絲帶</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="newcartoon">NewCartoon 流線</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="tube">Tube 圓管骨架</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice 全原子棒狀</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="surface">QuickSurf 溶劑表面</button>
       </div>
     </div>
 
-    <!-- DNA 樣式獨立切換 -->
+    <!-- DNA 樣式 -->
     <div class="mb-3">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">DNA 樣式 (DNA Style)</label>
       <select id="dna-style-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
-        <option value="licorice" selected>Licorice 棒狀模型</option>
-        <option value="cartoon">Cartoon 卡通絲帶</option>
-        <option value="spacefill">VDW 球體</option>
+        <option value="licorice_clean" selected>Licorice 輕量棒狀 (防殘影優化)</option>
+        <option value="cartoon">Cartoon 經典雙螺旋絲帶</option>
+        <option value="base">Ladder 階梯鹼基對模型</option>
       </select>
     </div>
 
-    <!-- 配色方案 -->
+    <!-- 著色方案 -->
     <div class="mb-2">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">著色規則 (Coloring Method)</label>
       <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
-        <option value="sstruc" selected>ResType / 二級結構</option>
-        <option value="chainid">Chain ID 鏈編號</option>
-        <option value="element">Element (CPK 原子顏色)</option>
-        <option value="residueindex">Residue Index 漸層彩虹</option>
+        <option value="sstruc" selected>ResType / 二級結構 (紅螺旋/黃摺疊)</option>
+        <option value="residueindex">Residue Index N至C漸層彩虹</option>
+        <option value="chainid">Chain ID 蛋白質與DNA分鏈染色</option>
+        <option value="element">CPK (碳白/氮藍/氧紅)</option>
       </select>
     </div>
   </div>
 
-  <!-- 底部 VMD Animate 播放控制器 -->
+  <!-- 底部播放控制器 -->
   <footer class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
     <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
       
-      <!-- 軌跡時間軸拉桿 -->
+      <!-- 軌跡拉桿 -->
       <div class="flex items-center space-x-3 w-full">
         <span class="font-mono-vmd text-xs text-cyan-300 font-semibold w-8 text-right" id="slider-curr-frame">0</span>
         <input id="trajectory-slider" type="range" min="0" max="0" value="0" step="1" 
@@ -178,54 +177,43 @@
         <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-8 text-left" id="slider-total-frame">0</span>
       </div>
 
-      <!-- 播放控制按鈕區 -->
+      <!-- 控制按鈕 -->
       <div class="flex items-center justify-between w-full pt-0.5">
-        
-        <!-- 循環模式切換 -->
-        <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1" title="循環模式">
+        <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1">
           <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
           <span id="loop-label">循環 (LOOP)</span>
         </button>
 
-        <!-- 步進 / 播放按鈕 -->
         <div class="flex items-center space-x-1 sm:space-x-2">
-          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="第一影格">
+          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
             <i data-lucide="skip-back" class="w-4 h-4"></i>
           </button>
-
-          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="倒退一格">
+          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
             <i data-lucide="step-back" class="w-4 h-4"></i>
           </button>
-
-          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停">
+          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1">
             <i id="play-icon" data-lucide="pause" class="w-5 h-5 fill-current"></i>
           </button>
-
-          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格">
+          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
             <i data-lucide="step-forward" class="w-4 h-4"></i>
           </button>
-
-          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="最後影格">
+          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
             <i data-lucide="skip-forward" class="w-4 h-4"></i>
           </button>
         </div>
 
-        <!-- 播放幀率設定 -->
         <div class="flex items-center space-x-1.5">
-          <i data-lucide="gauge" class="w-3.5 h-3.5 text-slate-400 hidden sm:inline"></i>
           <select id="fps-select" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none">
-            <option value="10">10 幀/秒</option>
-            <option value="20" selected>20 幀/秒</option>
-            <option value="30">30 幀/秒</option>
-            <option value="50">50 幀/秒</option>
+            <option value="12">12 fps (省電)</option>
+            <option value="20" selected>20 fps</option>
+            <option value="30">30 fps</option>
           </select>
         </div>
-
       </div>
     </div>
   </footer>
 
-  <!-- 說明對話框 -->
+  <!-- 說明面板 -->
   <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="vmd-panel max-w-md w-full rounded-2xl p-5 shadow-2xl border border-slate-700">
       <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
@@ -235,24 +223,16 @@
         </h3>
         <button id="btn-close-info" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
-      <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
-        <ul class="list-disc pl-5 space-y-1 text-slate-300">
-          <li><strong>單指滑動：</strong>3D 任意旋轉模型</li>
-          <li><strong>雙指捏合：</strong>放大 / 縮小 (Zoom)</li>
-          <li><strong>雙指同向拖曳：</strong>平移視角 (Pan)</li>
-          <li><strong>空白鍵：</strong>播放 / 暫停</li>
-        </ul>
+      <div class="space-y-2 text-xs text-slate-300 leading-relaxed">
+        <p>• <strong>單指滑動：</strong>3D 任意角度旋轉</p>
+        <p>• <strong>雙指縮放 / 平移：</strong>局部放大或平移</p>
+        <p>• <strong>結合區特寫按鈕：</strong>一鍵對焦至蛋白質與 DNA 接觸口袋</p>
       </div>
     </div>
   </div>
 
   <script>
-    const PROBE_LIST = [
-      'traj_light.pdb',
-      'trajectory.pdb',
-      'model.pdb',
-      'complex.pdb'
-    ];
+    const PROBE_LIST = ['traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
 
     const appState = {
       stage: null,
@@ -262,9 +242,10 @@
       currentFrame: 0,
       isPlaying: false,
       loopMode: 'loop',
-      repStyle: 'cartoon',
-      dnaStyle: 'licorice',
+      repStyle: 'newcartoon',
+      dnaStyle: 'licorice_clean',
       colorScheme: 'sstruc',
+      isFocusingInterface: false,
       availableFiles: []
     };
 
@@ -277,8 +258,6 @@
       loadingSubtext: document.getElementById('loading-subtext'),
       fileSelector: document.getElementById('file-selector'),
       btnRefreshFiles: document.getElementById('btn-refresh-files'),
-      atomCount: document.getElementById('atom-count'),
-      frameCounter: document.getElementById('frame-counter'),
       slider: document.getElementById('trajectory-slider'),
       sliderCurr: document.getElementById('slider-curr-frame'),
       sliderTotal: document.getElementById('slider-total-frame'),
@@ -293,6 +272,7 @@
       dnaStyleSelect: document.getElementById('dna-style-select'),
       colorSelect: document.getElementById('color-select'),
       btnResetView: document.getElementById('btn-reset-view'),
+      btnFocusInterface: document.getElementById('btn-focus-interface'),
       btnToggleRep: document.getElementById('btn-toggle-rep'),
       repModal: document.getElementById('rep-modal'),
       btnCloseRep: document.getElementById('btn-close-rep'),
@@ -334,7 +314,7 @@
             }
           }
         } catch (e) {
-          console.warn('GitHub API 未回應，改用候選清單探測:', e);
+          console.warn('GitHub API 未回應:', e);
         }
       }
 
@@ -351,31 +331,24 @@
       }
 
       appState.availableFiles = found;
-      populateDropdown(found);
-      hideLoading();
-
+      dom.fileSelector.innerHTML = '';
       if (found.length > 0) {
-        dom.fileSelector.value = found[0].url;
+        found.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.url;
+          opt.textContent = f.name;
+          dom.fileSelector.appendChild(opt);
+        });
+        hideLoading();
         loadPdbFile(found[0].url);
       } else {
         dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案</option>';
+        hideLoading();
       }
     }
 
-    function populateDropdown(files) {
-      dom.fileSelector.innerHTML = '';
-      if (files.length === 0) return;
-
-      files.forEach(f => {
-        const opt = document.createElement('option');
-        opt.value = f.url;
-        opt.textContent = f.name;
-        dom.fileSelector.appendChild(opt);
-      });
-    }
-
     /**
-     * 清空並重新繪製當前影格的 Representation (絕不重疊)
+     * 重建所有 Representation：支援 NewCartoon 質感與無殘影 Licorice
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -386,64 +359,112 @@
       const color = appState.colorScheme;
 
       // 1. 蛋白質主體
-      if (pRep === 'cartoon') {
+      if (pRep === 'newcartoon') {
+        // VMD 經典 NewCartoon：高 aspectRatio + 平滑 Sheet
         appState.component.addRepresentation('cartoon', {
           sele: 'protein',
           colorScheme: color,
-          aspectRatio: 3.2,
-          scale: 0.8
+          aspectRatio: 3.8,
+          scale: 0.9,
+          smoothSheet: true,
+          subdiv: 10
+        });
+      } else if (pRep === 'tube') {
+        // Tube 骨架管狀
+        appState.component.addRepresentation('tube', {
+          sele: 'protein',
+          colorScheme: color,
+          radius: 0.35,
+          subdiv: 8
         });
       } else if (pRep === 'licorice') {
+        // 全原子棒狀
         appState.component.addRepresentation('licorice', {
           sele: 'protein',
           colorScheme: color,
-          radius: 0.22
+          radius: 0.18,
+          multipleBond: 'off'
         });
-      } else if (pRep === 'spacefill') {
-        appState.component.addRepresentation('spacefill', {
+      } else if (pRep === 'surface') {
+        appState.component.addRepresentation('surface', {
           sele: 'protein',
           colorScheme: color,
-          scale: 0.85
-        });
-      } else if (pRep === 'ribbon') {
-        appState.component.addRepresentation('ribbon', {
-          sele: 'protein',
-          colorScheme: color,
-          scale: 1.4
+          surfaceType: 'ms',
+          opacity: 0.75
         });
       }
 
-      // 2. DNA / 核酸
-      if (dRep === 'licorice') {
+      // 2. DNA 渲染 (針對手機優化，避免殘影)
+      if (dRep === 'licorice_clean') {
+        // 降低細分並關閉複雜多鍵，杜絕殘留
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic',
           colorScheme: 'element',
-          radius: 0.24
+          radius: 0.22,
+          multipleBond: 'off'
         });
       } else if (dRep === 'cartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: 'nucleic',
           colorScheme: 'chainindex',
-          aspectRatio: 2.5
+          aspectRatio: 2.2,
+          scale: 1.0
         });
-      } else if (dRep === 'spacefill') {
-        appState.component.addRepresentation('spacefill', {
+      } else if (dRep === 'base') {
+        // Ladder 階梯鹼基模式
+        appState.component.addRepresentation('base', {
           sele: 'nucleic',
-          colorScheme: 'element',
-          scale: 0.8
+          colorScheme: 'resname'
         });
       }
 
-      // 3. 鋅離子 (ZN)：只畫金屬原子球
+      // 3. 鋅離子 (ZN)：金屬球體
       appState.component.addRepresentation('spacefill', {
         sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
         color: '#9ca3af',
         scale: 1.3
       });
+
+      // 4. 若開啟「結合區特寫模式」，高亮介面側鏈與 H-Bond
+      if (appState.isFocusingInterface) {
+        // 接觸界面定義：蛋白質周圍 4.0 Å 內的 DNA 以及 DNA 周圍 4.0 Å 內的蛋白質側鏈
+        appState.component.addRepresentation('licorice', {
+          sele: '(protein and within 4.0 of nucleic) and not backbone',
+          colorScheme: 'element',
+          radius: 0.22
+        });
+        // 顯示接觸區氫鍵
+        appState.component.addRepresentation('contact', {
+          sele: 'protein or nucleic',
+          contactType: 'polar',
+          maxDistance: 3.5,
+          color: '#38bdf8'
+        });
+      }
     }
 
     /**
-     * 載入 PDB 檔案 (核心：以 asTrajectory: true 消除多影格重疊)
+     * 一鍵鏡頭特寫蛋白質與 DNA 結合口袋
+     */
+    function toggleFocusInterface() {
+      if (!appState.component) return;
+      appState.isFocusingInterface = !appState.isFocusingInterface;
+
+      applyAllRepresentations();
+
+      if (appState.isFocusingInterface) {
+        // 鏡頭鎖定在 (protein within 4.5 of nucleic)
+        appState.component.autoView('(protein and within 4.5 of nucleic) or (nucleic and within 4.5 of protein)', 800);
+        dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
+      } else {
+        // 重設整體視野
+        appState.component.autoView(600);
+        dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
+      }
+    }
+
+    /**
+     * 載入 PDB 檔案
      */
     async function loadPdbFile(urlOrFile) {
       if (appState.trajPlayer) {
@@ -457,49 +478,37 @@
       try {
         appState.stage.removeAllComponents();
 
-        // ★★★ 關鍵核心：asTrajectory: true 讓 NGL 只顯示單一幀，座標動態更新，杜絕疊影 ★★★
+        // 載入多影格軌跡
         const comp = await appState.stage.loadFile(urlOrFile, {
           defaultRepresentation: false,
           asTrajectory: true
         });
         appState.component = comp;
 
-        // 繪製初始 Representation
         applyAllRepresentations();
         comp.autoView(500);
 
-        // 掛載 Trajectory 播放引擎
         const trajComp = comp.addTrajectory();
         const trajectory = trajComp.trajectory;
 
-        // 綁定影格計數與自動播放
         trajectory.signals.countChanged.add(function (count) {
           appState.totalFrames = count;
           dom.slider.max = count - 1;
           dom.sliderTotal.textContent = String(count - 1);
-          dom.frameCounter.textContent = `1 / ${count}`;
-
           if (count > 1) {
             setupPlayer(trajectory);
           } else {
-            dom.frameCounter.textContent = '1 / 1 (靜態)';
             updatePlayIcon(false);
           }
         });
 
-        // 若影格數立即可讀
         const initCount = trajectory.frameCount || 1;
         if (initCount > 1) {
           appState.totalFrames = initCount;
           dom.slider.max = initCount - 1;
           dom.sliderTotal.textContent = String(initCount - 1);
-          dom.frameCounter.textContent = `1 / ${initCount}`;
           setupPlayer(trajectory);
         }
-
-        // 讀取每影格原子數 (去除疊加干擾)
-        const atoms = (comp.structure.atomCount || 0) / (trajectory.frameCount || 1);
-        dom.atomCount.textContent = Math.round(atoms).toLocaleString();
 
         hideLoading();
       } catch (err) {
@@ -512,23 +521,17 @@
       }
     }
 
-    /**
-     * 設定原生播放控制器
-     */
     function setupPlayer(trajectory) {
       appState.trajPlayer = trajectory.player;
-      appState.trajPlayer.mode = appState.loopMode; // 'loop', 'rock', 'once'
-      appState.trajPlayer.timeout = 50; // 20 fps
+      appState.trajPlayer.mode = appState.loopMode;
+      appState.trajPlayer.timeout = 50;
 
-      // 監聽影格變更更新 UI
       trajectory.signals.frameChanged.add(function (frame) {
         appState.currentFrame = frame;
         dom.slider.value = frame;
         dom.sliderCurr.textContent = frame;
-        dom.frameCounter.textContent = `${frame + 1} / ${appState.totalFrames}`;
       });
 
-      // 自動開始播放
       appState.trajPlayer.play();
       appState.isPlaying = true;
       updatePlayIcon(true);
@@ -679,6 +682,9 @@
         if (appState.component) appState.component.autoView(500);
       });
 
+      // 一鍵結合界面特寫
+      dom.btnFocusInterface.addEventListener('click', toggleFocusInterface);
+
       dom.btnToggleRep.addEventListener('click', () => {
         dom.repModal.classList.toggle('hidden');
       });
@@ -732,15 +738,15 @@
     }
 
     window.addEventListener('load', () => {
+      // 針對手機端優化 WebGL 渲染管線，關閉粗糙後製，防止動態拖影
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
         cameraType: 'perspective',
         ambientColor: 0xffffff,
-        ambientIntensity: 0.45,
+        ambientIntensity: 0.5,
         lightColor: 0xffffff,
-        lightIntensity: 0.85,
-        fogNear: 50,
-        fogFar: 100
+        lightIntensity: 0.9,
+        sampleLevel: 0 // 關閉多重採樣防止手機端影格殘留
       });
 
       window.addEventListener('resize', () => {
