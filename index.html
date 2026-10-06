@@ -511,7 +511,7 @@
     }
 
     /**
-     * 重建 Representation (經典 VMD Ladder：雙螺旋絲帶 + 實心跨股階梯棒)
+     * 重建所有 Representation (修復鋅離子不消失 + 完美 VMD Ladder 橫竿 + 局部特寫)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -523,7 +523,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體
+      // 1. 蛋白質主體 (永遠不帶氫、不帶鋅)
       const protBaseSele = 'protein and not hydrogen';
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
@@ -550,7 +550,7 @@
         });
       }
 
-      // 2. DNA 雙螺旋骨架絲帶 (分股繪製，絕不相連)
+      // 2. DNA 雙螺旋骨架絲帶 (分股獨立繪製，永不相連閉環)
       appState.dnaStrandSelections.forEach(strandSele => {
         if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
           appState.component.addRepresentation('cartoon', {
@@ -564,40 +564,53 @@
         }
       });
 
-      // 3. DNA 階梯橫竿 (Ladder Rungs)
+      // 3. DNA 鹼基橫竿 (VMD Ladder Rungs)
       if (dRep === 'vmd_ladder') {
-        // 使用跨鏈配對橫柱繪製實心階梯棒 (VMD 經典階梯棒，絕不把環拆解成雜亂的 licorice)
-        if (appState.ladderPairs.length > 0) {
+        // (A) 糖苷鍵短竿：連回雙螺旋骨架 C1' (使浮空的環與骨架實心相連)
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not hydrogen and not resname ZN and not resname ZN2 and (.C1\' or .N9 or .N1)',
+          ...dColorParams,
+          radius: 0.22,
+          multipleBond: 'off'
+        });
+
+        // (B) 鹼基環平面：精緻棒狀結構
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not backbone and not hydrogen and not resname ZN and not resname ZN2',
+          ...dColorParams,
+          radius: 0.18,
+          multipleBond: 'off'
+        });
+
+        // (C) 兩股之間的互補梯級橫柱 (Ladder 橫桿)
+        if (appState.ladderPairs && appState.ladderPairs.length > 0) {
           appState.component.addRepresentation('distance', {
             sele: appState.ladderPairs,
             color: '#cbd5e1',
-            radius: 0.22,
+            radius: 0.20,
             labelVisible: false
           });
         }
       } else if (dRep === 'licorice') {
-        // 使用者主動選 Licorice 時才渲染全棒狀
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not hydrogen',
+          sele: 'not protein and not hydrogen and not resname ZN and not resname ZN2',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 4. 鋅離子 (ZN)：精緻小金屬球
-      if (appState.zincAtomIndex >= 0) {
-        appState.component.addRepresentation('spacefill', {
-          sele: `@${appState.zincAtomIndex}`,
-          color: '#94a3b8',
-          scale: 0.65
-        });
-      }
+      // 4. 鋅離子 (ZN)：獨立固定渲染，絕不因切換樣式而消失
+      appState.component.addRepresentation('spacefill', {
+        sele: 'resname ZN or resname ZN2 or element Zn',
+        color: '#94a3b8',
+        scale: 0.7
+      });
 
       // 5. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
-          sele: 'not protein and not hydrogen and (.C1\' or .C1*)',
+          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .C1*)',
           labelType: 'resname',
           color: '#f8fafc',
           scale: 1.2,
@@ -605,7 +618,7 @@
         });
       }
 
-      // 6. 結合區特寫模式：只繪製接觸側鏈與接觸鹼基
+      // 6. 結合區特寫模式：只動態高亮局部接觸側鏈與鹼基
       if (appState.isFocusingInterface) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
