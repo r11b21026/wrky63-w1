@@ -87,7 +87,7 @@
     <div class="flex items-center space-x-2 pointer-events-auto">
       
       <!-- 一鍵結合口袋特寫按鈕 -->
-      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (局部極性作用 + 適度放大)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (只顯示接觸側鏈與鹼基)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -127,7 +127,6 @@
             <option value="newcartoon" selected>NewCartoon 卡通</option>
             <option value="tube">Tube 圓管骨架</option>
             <option value="licorice">Licorice 棒狀</option>
-            <option value="surface">QuickSurf 表面</option>
           </select>
         </div>
         <div>
@@ -140,8 +139,6 @@
             <option value="#ef4444">ColorID 1: 紅色 (Red)</option>
             <option value="#22c55e">ColorID 2: 綠色 (Green)</option>
             <option value="#eab308">ColorID 3: 黃色 (Yellow)</option>
-            <option value="#a855f7">ColorID 4: 紫色 (Purple)</option>
-            <option value="#ffffff">ColorID 8: 白色 (White)</option>
           </select>
         </div>
       </div>
@@ -155,8 +152,8 @@
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
             <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基竿 (Ladder)</option>
-            <option value="licorice">Licorice 棒狀模型</option>
             <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
+            <option value="licorice">Licorice 棒狀模型</option>
           </select>
         </div>
         <div>
@@ -166,8 +163,6 @@
             <option value="element">Element CPK (碳黃/磷橘)</option>
             <option value="#f97316">ColorID 5: 亮橘 (Orange)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
-            <option value="#eab308">ColorID 3: 黃色 (Yellow)</option>
-            <option value="#22c55e">ColorID 2: 綠色 (Green)</option>
           </select>
         </div>
       </div>
@@ -179,18 +174,16 @@
       </div>
     </div>
 
-    <!-- 總模擬時間設定 (計算 ns) -->
+    <!-- 總模擬時間設定 -->
     <div class="p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs font-mono-vmd text-slate-300">
       <span>軌跡總時長 (ns):</span>
       <input type="number" id="input-total-ns" value="100" min="1" step="5" class="w-16 bg-slate-800 border border-slate-700 text-cyan-300 px-2 py-1 rounded text-right focus:outline-none font-bold">
     </div>
   </div>
 
-  <!-- 底部播放控制器 (靜態結構時會完全自動隱藏) -->
+  <!-- 底部播放控制器 -->
   <footer id="bottom-timeline" class="hidden absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex-col items-center">
     <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
-      
-      <!-- 軌跡拉桿 -->
       <div class="flex items-center space-x-3 w-full">
         <span class="font-mono-vmd text-xs text-cyan-300 font-semibold w-8 text-right" id="slider-curr-frame">0</span>
         <input id="trajectory-slider" type="range" min="0" max="0" value="0" step="1" 
@@ -198,7 +191,6 @@
         <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-8 text-left" id="slider-total-frame">0</span>
       </div>
 
-      <!-- 控制按鈕與時間 HUD -->
       <div class="flex items-center justify-between w-full pt-0.5">
         <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1">
           <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
@@ -223,7 +215,6 @@
           </button>
         </div>
 
-        <!-- 即時 ns 時間顯示 -->
         <div class="flex items-center space-x-2 font-mono-vmd text-xs">
           <span class="text-cyan-400 font-bold bg-slate-900/90 px-2 py-1 rounded-lg border border-cyan-500/30 shadow-inner" id="time-ns-display">
             0.0 ns
@@ -234,7 +225,7 @@
   </footer>
 
   <script>
-    const PROBE_LIST = ['traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
+    const PROBE_LIST = ['traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb', 'complex_db_dry.pdb'];
 
     const appState = {
       stage: null,
@@ -255,7 +246,8 @@
       showBaseLabels: false,
       isFocusingInterface: false,
       availableFiles: [],
-      dnaStrands: []
+      strand1Sele: 'nucleic',
+      strand2Sele: ''
     };
 
     lucide.createIcons();
@@ -364,74 +356,54 @@
     }
 
     /**
-     * 專門適配 MDTraj/Amber PDB 的 DNA 正反股切分算法
-     * 徹底解決 93(DA3) 與 94(DT5) 甚至 CONECT 所造成的骨架黏合假象
+     * 強制準確辨識 DNA 兩股殘基號碼區間 (80~93 與 94~107)
      */
-    function detectDnaStrands(structure) {
-      const nucleicRes = [];
+    function analyzeDnaStrands(structure) {
+      const dnaResnos = [];
+      const endResnos = [];
 
       structure.eachResidue(r => {
-        // NGL 內部對 Amber 的 DG5, DA3, DT5 等有時未完全標註 isNucleic，做雙重驗證
         const rname = (r.resname || '').trim().toUpperCase();
-        const isAmberDna = /^(D[ATCG][35]?|[ATCG][35]?|DA|DT|DC|DG)$/.test(rname);
-        if (r.isNucleic() || isAmberDna) {
-          nucleicRes.push({
-            resno: r.resno,
-            resname: rname,
-            chain: r.chainname ? r.chainname.trim() : ''
-          });
+        // 判定是否為 DNA 殘基
+        if (r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?|DA|DT|DC|DG)$/.test(rname)) {
+          dnaResnos.push(r.resno);
+          // 若殘基名稱帶有 3 (如 DA3, DC3)，表示為 3' 端點
+          if (rname.endsWith('3')) {
+            endResnos.push(r.resno);
+          }
         }
       });
 
-      if (nucleicRes.length === 0) return ['nucleic'];
-
-      // 1. 如果 PDB 原生就有不同 chain 代號
-      const chains = Array.from(new Set(nucleicRes.map(n => n.chain))).filter(Boolean);
-      if (chains.length >= 2) {
-        return chains.map(c => `nucleic and :${c}`);
+      if (dnaResnos.length === 0) {
+        appState.strand1Sele = 'nucleic';
+        appState.strand2Sele = '';
+        return;
       }
 
-      // 2. 依 Amber 3' 端殘基名稱切分 (如 DA3, DT3, DC3, DG3)
-      const resnos = Array.from(new Set(nucleicRes.map(n => n.resno))).sort((a,b) => a - b);
-      let splitPoint = -1;
+      const uniqueRes = Array.from(new Set(dnaResnos)).sort((a,b) => a - b);
+      const minRes = uniqueRes[0];
+      const maxRes = uniqueRes[uniqueRes.length - 1];
 
-      for (let i = 0; i < nucleicRes.length; i++) {
-        const item = nucleicRes[i];
-        if (item.resname.endsWith('3') && i < nucleicRes.length - 1) {
-          splitPoint = item.resno;
-          break;
-        }
+      let splitRes = -1;
+      if (endResnos.length > 0) {
+        splitRes = endResnos[0];
+      } else {
+        // 如果沒有 3' 標記，直接均分
+        const half = Math.floor(uniqueRes.length / 2);
+        splitRes = uniqueRes[half - 1];
       }
 
-      // 3. 依 5' 端殘基名稱判定第二股開頭 (如 DT5, DG5)
-      if (splitPoint === -1) {
-        for (let i = 1; i < nucleicRes.length; i++) {
-          const item = nucleicRes[i];
-          if (item.resname.endsWith('5')) {
-            splitPoint = nucleicRes[i - 1].resno;
-            break;
-          }
-        }
+      if (splitRes >= minRes && splitRes < maxRes) {
+        appState.strand1Sele = `nucleic and ${minRes}-${splitRes}`;
+        appState.strand2Sele = `nucleic and ${splitRes + 1}-${maxRes}`;
+      } else {
+        appState.strand1Sele = `nucleic`;
+        appState.strand2Sele = '';
       }
-
-      // 4. 若以上皆無，取殘基編號中間值強制切成兩股獨立絲帶
-      if (splitPoint === -1 && resnos.length >= 2) {
-        const midIdx = Math.floor(resnos.length / 2) - 1;
-        splitPoint = resnos[midIdx];
-      }
-
-      if (splitPoint !== -1) {
-        return [
-          `nucleic and resno <= ${splitPoint}`,
-          `nucleic and resno > ${splitPoint}`
-        ];
-      }
-
-      return ['nucleic'];
     }
 
     /**
-     * 重建所有 Representation
+     * 重建 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -443,10 +415,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 特寫時背景骨架保持微透 (0.35)，維持整體結構輪廓
-      const bgOpacity = appState.isFocusingInterface ? 0.35 : 1.0;
-
-      // 1. 蛋白質主體
+      // 1. 蛋白質主體 (保持實心，不使用半透明避免破面鬼影)
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: 'protein',
@@ -454,71 +423,62 @@
           aspectRatio: 3.8,
           scale: 0.9,
           smoothSheet: true,
-          subdiv: 6,
-          opacity: bgOpacity
+          subdiv: 6
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
           sele: 'protein',
           ...pColorParams,
           radius: 0.32,
-          subdiv: 6,
-          opacity: bgOpacity
+          subdiv: 6
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'protein',
           ...pColorParams,
           radius: 0.2,
-          multipleBond: 'off',
-          opacity: bgOpacity
-        });
-      } else if (pRep === 'surface') {
-        appState.component.addRepresentation('surface', {
-          sele: 'protein',
-          ...pColorParams,
-          surfaceType: 'ms',
-          opacity: appState.isFocusingInterface ? 0.15 : 0.75
+          multipleBond: 'off'
         });
       }
 
-      // 2. DNA 渲染：正反兩股各自獨立 Cartoon，徹底消除相連問題
-      const strands = appState.dnaStrands.length > 0 ? appState.dnaStrands : ['nucleic'];
+      // 2. DNA 雙螺旋骨架 (第一股與第二股在物理上獨立繪製，絕不連在一起)
+      const renderStrandCartoon = (seleStr) => {
+        if (!seleStr) return;
+        appState.component.addRepresentation('cartoon', {
+          sele: seleStr,
+          ...dColorParams,
+          aspectRatio: 2.8,
+          scale: 0.85,
+          smoothSheet: true,
+          subdiv: 6
+        });
+      };
 
-      strands.forEach(strandSele => {
-        if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
-          appState.component.addRepresentation('cartoon', {
-            sele: strandSele,
-            ...dColorParams,
-            aspectRatio: 2.8,
-            scale: 0.85,
-            smoothSheet: true,
-            subdiv: 6,
-            opacity: bgOpacity
-          });
+      if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
+        renderStrandCartoon(appState.strand1Sele);
+        if (appState.strand2Sele) {
+          renderStrandCartoon(appState.strand2Sele);
         }
-      });
+      }
 
-      // 鹼基竿子 (Ladder Blocks)
+      // 鹼基梯級 (Ladder Blocks)
       if (dRep === 'vmd_ladder') {
         appState.component.addRepresentation('base', {
           sele: 'nucleic',
-          ...dColorParams,
-          opacity: bgOpacity
+          ...dColorParams
         });
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic',
           ...dColorParams,
           radius: 0.22,
-          multipleBond: 'off',
-          opacity: bgOpacity
+          multipleBond: 'off'
         });
       }
 
-      // 3. 鋅離子 (ZN)：金屬球
+      // 3. 鋅離子 (ZN)：精確限制元素為 Zn，防止多出怪球
       appState.component.addRepresentation('spacefill', {
-        sele: '_ZN or :ZN or :ZN2 or [ZN] or [ZN2] or zinc or @1302',
+        sele: 'element Zn or resname ZN',
         color: '#94a3b8',
         scale: 0.65
       });
@@ -534,40 +494,39 @@
         });
       }
 
-      // 5. 結合區特寫模式：只繪製真正有極性接觸的局部側鏈與鹼基
+      // 5. 結合區特寫模式 (真正局部：只抓 WRKY 結合指環殘基 17~25，以及形成極性接觸的鹼基)
       if (appState.isFocusingInterface) {
-        // (A) 蛋白質側鏈：只高亮距離 DNA 3.2 Å 以內的關鍵極性帶電殘基 (Arg, Lys, His, Asp, Glu, Tyr, Ser, Thr)
-        // 且嚴格限定 sidechain and not backbone，避免把整個蛋白變成 Licorice
-        const contactSidechains = 'protein and (ARG or LYS or HIS or ASP or GLU or TYR or SER or THR) and (sidechain and not backbone) and within 3.2 of nucleic';
+        // (A) 蛋白質核心 DNA 接觸側鏈 (Arg19, Lys20, Lys24, Thr25 等 WRKYGQK 區域側鏈)
+        const pocketSidechains = 'protein and 17-26 and sidechain and not backbone';
         appState.component.addRepresentation('licorice', {
-          sele: contactSidechains,
+          sele: pocketSidechains,
           colorScheme: 'element',
-          radius: 0.22,
+          radius: 0.24,
           multipleBond: 'off'
         });
 
-        // (B) DNA 局部鹼基：只高亮距離蛋白質 3.2 Å 以內且非 backbone 的原子
-        const contactBases = 'nucleic and not backbone and within 3.2 of protein';
+        // (B) 與上述殘基有實質緊密接觸 (2.8 Å 內) 的局部鹼基
+        const pocketBases = 'nucleic and not backbone and within 2.8 of (protein and 17-26)';
         appState.component.addRepresentation('licorice', {
-          sele: contactBases,
+          sele: pocketBases,
           colorScheme: 'element',
-          radius: 0.22,
+          radius: 0.24,
           multipleBond: 'off'
         });
 
-        // (C) 跨分子極性作用虛線 (氫鍵與鹽橋)
+        // (C) 跨分子極性作用虛線
         appState.component.addRepresentation('contact', {
-          sele: 'protein',
+          sele: 'protein and 17-26',
           filterSele: 'nucleic',
           contactType: 'polar',
-          maxDistance: 3.5,
+          maxDistance: 3.4,
           color: '#38bdf8'
         });
       }
     }
 
     /**
-     * 一鍵結合區特寫與視角移動
+     * 一鍵結合區特寫開關
      */
     function toggleFocusInterface() {
       if (!appState.component) return;
@@ -576,10 +535,8 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        // 視角對焦到介面接觸區核心 (Arg, Lys 等結合核心)
-        const pocketSele = '(protein and within 3.5 of nucleic) and not (resno < 10 or resno > 75)';
-        appState.component.autoView(pocketSele || 'nucleic', 800);
-
+        // 鏡頭平滑移至核心結合面 (殘基 17~26 與 DNA 結合處)
+        appState.component.autoView('17-26 or (nucleic and within 4.0 of (17-26))', 800);
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
       } else {
@@ -693,8 +650,8 @@
         });
         appState.component = comp;
 
-        // 偵測正反兩股邊界 (切開 93 與 94)
-        appState.dnaStrands = detectDnaStrands(comp.structure);
+        // 計算兩股確切的殘基範圍 (80-93 與 94-107)
+        analyzeDnaStrands(comp.structure);
 
         applyAllRepresentations();
         comp.autoView(500);
