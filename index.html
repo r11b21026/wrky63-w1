@@ -46,10 +46,6 @@
     input[type=range] {
       accent-color: #38bdf8;
     }
-
-    #axes-canvas {
-      pointer-events: none;
-    }
   </style>
 </head>
 <body class="w-screen h-screen relative bg-[#0b0f19]">
@@ -91,7 +87,7 @@
     <div class="flex items-center space-x-2 pointer-events-auto">
       
       <!-- 一鍵結合口袋特寫按鈕 -->
-      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (Zoom In + 跨分子氫鍵)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -113,12 +109,6 @@
       </button>
     </div>
   </header>
-
-  <!-- 左下角 VMD 座標三軸 -->
-  <div class="absolute bottom-28 left-4 z-10 flex flex-col items-center pointer-events-none select-none">
-    <canvas id="axes-canvas" width="86" height="86" class="drop-shadow-lg"></canvas>
-    <span class="font-mono-vmd text-[10px] text-slate-400 font-bold tracking-widest mt-[-8px]">VMD 座標軸</span>
-  </div>
 
   <!-- 幾何顯示與自訂顏色面板 -->
   <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-88 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
@@ -148,9 +138,10 @@
           </select>
         </div>
         <div>
-          <label class="block text-[11px] text-slate-400 mb-1">顏色 (ColorID)</label>
+          <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
             <option value="sstruc" selected>二級結構 (紅/黃/青)</option>
+            <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
             <option value="#ef4444">ColorID 1: 紅色 (Red)</option>
@@ -172,13 +163,13 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="licorice" selected>Licorice 棒狀模型</option>
-            <option value="cartoon">Cartoon 絲帶</option>
+            <option value="cartoon" selected>NewCartoon 絲帶流線</option>
+            <option value="licorice">Licorice 棒狀模型</option>
             <option value="base">Ladder 階梯模型</option>
           </select>
         </div>
         <div>
-          <label class="block text-[11px] text-slate-400 mb-1">顏色 (ColorID)</label>
+          <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
             <option value="element" selected>Element CPK (碳黃/磷橘)</option>
             <option value="#f97316">ColorID 5: 亮橘 (Orange)</option>
@@ -195,10 +186,10 @@
     <!-- 鋅離子說明 -->
     <div class="p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs font-mono-vmd text-slate-300">
       <div class="flex items-center space-x-2">
-        <span class="w-3.5 h-3.5 rounded-full bg-slate-400 border border-slate-200 shadow"></span>
+        <span class="w-3 h-3 rounded-full bg-slate-400 border border-slate-200 shadow"></span>
         <span>鋅離子 (Zinc, Zn²⁺)</span>
       </div>
-      <span class="text-cyan-400 font-bold">金屬灰球</span>
+      <span class="text-cyan-400 font-bold">小金屬球 (0.65x)</span>
     </div>
   </div>
 
@@ -241,7 +232,7 @@
 
         <div class="flex items-center space-x-1.5">
           <select id="fps-select" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none">
-            <option value="12">12 fps (省電)</option>
+            <option value="12">12 fps</option>
             <option value="20" selected>20 fps</option>
             <option value="30">30 fps</option>
           </select>
@@ -256,14 +247,14 @@
       <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
         <h3 class="text-sm font-bold text-cyan-400 flex items-center space-x-2">
           <i data-lucide="info" class="w-4 h-4"></i>
-          <span>操作手勢指南</span>
+          <span>操作指南</span>
         </h3>
         <button id="btn-close-info" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
       <div class="space-y-2 text-xs text-slate-300 leading-relaxed">
         <p>• <strong>單指滑動：</strong>3D 任意旋轉</p>
         <p>• <strong>雙指捏合：</strong>放大 / 縮小</p>
-        <p>• <strong>結合區特寫：</strong>平滑推進鏡頭至口袋並顯示跨分子氫鍵</p>
+        <p>• <strong>結合區特寫：</strong>淡化整體背景、Zoom In 聚焦界面，並突顯跨分子氫鍵</p>
       </div>
     </div>
   </div>
@@ -281,7 +272,7 @@
       loopMode: 'loop',
       protStyle: 'newcartoon',
       protColor: 'sstruc',
-      dnaStyle: 'licorice',
+      dnaStyle: 'cartoon',
       dnaColor: 'element',
       isFocusingInterface: false,
       availableFiles: []
@@ -319,8 +310,7 @@
       btnCloseRep: document.getElementById('btn-close-rep'),
       btnInfo: document.getElementById('btn-info'),
       infoModal: document.getElementById('info-modal'),
-      btnCloseInfo: document.getElementById('btn-close-info'),
-      axesCanvas: document.getElementById('axes-canvas')
+      btnCloseInfo: document.getElementById('btn-close-info')
     };
 
     function showLoading(title, sub = '') {
@@ -396,7 +386,7 @@
     }
 
     /**
-     * 重建所有 Representation (安全精準選取，杜絕全選白球)
+     * 重建所有 Representation：支援特寫模式背景淡化、無殘影優化與小鋅球
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -408,6 +398,9 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
+      // 若在特寫模式，主體背景透明度降低，讓路給結合界面
+      const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
+
       // 1. 蛋白質主體
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
@@ -416,75 +409,87 @@
           aspectRatio: 3.8,
           scale: 0.9,
           smoothSheet: true,
-          subdiv: 10
+          subdiv: 6, // 降低細分，杜絕手機殘影
+          opacity: bgOpacity
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
           sele: 'protein',
           ...pColorParams,
-          radius: 0.35,
-          subdiv: 8
+          radius: 0.32,
+          subdiv: 6,
+          opacity: bgOpacity
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'protein',
           ...pColorParams,
           radius: 0.2,
-          multipleBond: 'off'
+          multipleBond: 'off',
+          opacity: bgOpacity
         });
       } else if (pRep === 'surface') {
         appState.component.addRepresentation('surface', {
           sele: 'protein',
           ...pColorParams,
           surfaceType: 'ms',
-          opacity: 0.75
+          opacity: appState.isFocusingInterface ? 0.15 : 0.75
         });
       }
 
-      // 2. DNA / 核酸渲染
-      if (dRep === 'licorice') {
+      // 2. DNA / 核酸 (NewCartoon 風格)
+      if (dRep === 'cartoon') {
+        appState.component.addRepresentation('cartoon', {
+          sele: 'nucleic',
+          ...dColorParams,
+          aspectRatio: 3.2,
+          scale: 0.85,
+          smoothSheet: true,
+          subdiv: 6,
+          opacity: bgOpacity
+        });
+      } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic',
           ...dColorParams,
           radius: 0.22,
-          multipleBond: 'off'
-        });
-      } else if (dRep === 'cartoon') {
-        appState.component.addRepresentation('cartoon', {
-          sele: 'nucleic',
-          ...dColorParams,
-          aspectRatio: 2.2,
-          scale: 1.0
+          multipleBond: 'off',
+          opacity: bgOpacity
         });
       } else if (dRep === 'base') {
         appState.component.addRepresentation('base', {
           sele: 'nucleic',
-          ...dColorParams
+          ...dColorParams,
+          opacity: bgOpacity
         });
       }
 
-      // 3. 鋅離子 (ZN)：★ 徹底修復為安全嚴格選取，絕不誤判全選 ★
+      // 3. 鋅離子 (ZN)：縮小至 0.65x，更真實
       appState.component.addRepresentation('spacefill', {
         sele: '_ZN or :ZN or :ZN2 or [ZN] or [ZN2] or zinc',
         color: '#94a3b8',
-        scale: 1.2
+        scale: 0.65
       });
 
-      // 4. 若開啟「結合區特寫模式」：只突顯界面側鏈與跨分子氫鍵
+      // 4. 若開啟「結合區特寫模式」：乾淨高亮介面側鏈與跨分子氫鍵
       if (appState.isFocusingInterface) {
-        // (A) 高亮介面蛋白質側鏈與鹼基
+        // (A) 高亮界面蛋白質側鏈 (不含骨架，畫面極度乾淨)
         appState.component.addRepresentation('licorice', {
-          sele: '(protein and within 4.0 of nucleic) and not backbone',
+          sele: '(protein and within 4.2 of nucleic) and not backbone',
           colorScheme: 'element',
-          radius: 0.22
-        });
-        appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and within 4.0 of protein',
-          colorScheme: 'element',
-          radius: 0.22
+          radius: 0.22,
+          multipleBond: 'off'
         });
 
-        // (B) 跨分子極性交互作用 (僅 protein 與 nucleic 之間)
+        // (B) 高亮參與接觸的 DNA 鹼基與骨架
+        appState.component.addRepresentation('licorice', {
+          sele: 'nucleic and within 4.2 of protein',
+          colorScheme: 'element',
+          radius: 0.22,
+          multipleBond: 'off'
+        });
+
+        // (C) 跨分子極性交互作用 (精確鎖定蛋白質與核酸之間)
         appState.component.addRepresentation('contact', {
           sele: 'protein',
           filterSele: 'nucleic',
@@ -496,7 +501,7 @@
     }
 
     /**
-     * 一鍵鏡頭特寫蛋白質與 DNA 結合口袋
+     * 一鍵結合區特寫：平滑推近鏡頭 (Zoom In) 到接觸口袋
      */
     function toggleFocusInterface() {
       if (!appState.component) return;
@@ -505,14 +510,21 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        // 取得介面原子並平滑縮放推近
-        const interfaceSele = '(protein and within 4.2 of nucleic) or (nucleic and within 4.2 of protein)';
-        appState.component.autoView(interfaceSele, 800);
+        const interfaceSele = '(protein and within 4.5 of nucleic) or (nucleic and within 4.5 of protein)';
+        
+        // 1. 先將鏡頭置中於結合口袋
+        appState.component.autoView(interfaceSele, 600);
+
+        // 2. 平滑推近 Zoom In 25%
+        setTimeout(() => {
+          appState.stage.animationControls.zoom(0.75, 400);
+        }, 300);
 
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
       } else {
-        appState.component.autoView(600);
+        // 重設整體視野
+        appState.component.autoView(500);
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '結合區特寫';
       }
@@ -609,60 +621,6 @@
         appState.isPlaying = true;
         updatePlayIcon(true);
       }
-    }
-
-    function drawVmdAxes() {
-      const canvas = dom.axesCanvas;
-      if (!canvas || !appState.stage) return;
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const rot = appState.stage.viewerControls.getOrientation();
-      const r00 = rot[0], r01 = rot[1], r02 = rot[2];
-      const r10 = rot[4], r11 = rot[5], r12 = rot[6];
-      const r20 = rot[8], r21 = rot[9], r22 = rot[10];
-
-      const cX = w / 2;
-      const cY = h / 2;
-      const length = 26;
-
-      const axes = [
-        { label: 'X', color: '#ef4444', x: r00 * length, y: -r01 * length, z: r02 },
-        { label: 'Y', color: '#22c55e', x: r10 * length, y: -r11 * length, z: r12 },
-        { label: 'Z', color: '#38bdf8', x: r20 * length, y: -r21 * length, z: r22 }
-      ];
-
-      axes.sort((a, b) => a.z - b.z);
-
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.font = 'bold 10px JetBrains Mono, monospace';
-
-      axes.forEach(axis => {
-        ctx.strokeStyle = axis.color;
-        ctx.fillStyle = axis.color;
-
-        ctx.beginPath();
-        ctx.moveTo(cX, cY);
-        const endX = cX + axis.x;
-        const endY = cY + axis.y;
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        const offset = 6;
-        const mag = Math.sqrt(axis.x * axis.x + axis.y * axis.y) || 1;
-        const lx = endX + (axis.x / mag) * offset;
-        const ly = endY + (axis.y / mag) * offset + 3;
-
-        ctx.fillText(axis.label, lx - 3, ly);
-      });
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.arc(cX, cY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
     }
 
     function initEvents() {
@@ -784,26 +742,27 @@
     }
 
     window.addEventListener('load', () => {
+      // 深度優化手機 WebGL 渲染管線：關閉多餘景深，消除暫留拖影
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
         cameraType: 'perspective',
         ambientColor: 0xffffff,
-        ambientIntensity: 0.5,
+        ambientIntensity: 0.55,
         lightColor: 0xffffff,
-        lightIntensity: 0.9,
+        lightIntensity: 0.95,
+        clipNear: 0,
+        clipFar: 100,
+        fogNear: 100,
+        fogFar: 100,
         sampleLevel: 0
       });
 
       window.addEventListener('resize', () => {
         appState.stage.handleResize();
-        drawVmdAxes();
       });
-
-      appState.stage.viewerControls.signals.changed.add(drawVmdAxes);
 
       initEvents();
       scanPdbFiles();
-      setInterval(drawVmdAxes, 60);
     });
   </script>
 </body>
