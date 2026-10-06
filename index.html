@@ -421,19 +421,38 @@
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // 產生梯竿 (Ladder Rungs)：正反兩股對應的 C1' 原子對配對
+      // 產生梯竿 (Ladder Rungs)：基於 3D 空間距離自動尋找互補對（防止錯位與懸空）
       const ladderPairs = [];
       if (strandGroups.length >= 2) {
         const g1 = strandGroups[0];
         const g2 = strandGroups[1];
-        const len = Math.min(g1.length, g2.length);
-        for (let i = 0; i < len; i++) {
-          const c1_A = g1[i].c1;
-          const c1_B = g2[len - 1 - i].c1;
-          if (c1_A && c1_B) {
-            ladderPairs.push([`@${c1_A.index}`, `@${c1_B.index}`]);
+
+        g1.forEach(r1 => {
+          if (!r1.c1) return;
+          let bestPair = null;
+          let minDiff = 999;
+
+          g2.forEach(r2 => {
+            if (!r2.c1) return;
+            const dx = r1.c1.x - r2.c1.x;
+            const dy = r1.c1.y - r2.c1.y;
+            const dz = r1.c1.z - r2.c1.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            // B-DNA 互補鹼基對的 C1'-C1' 距離通常約為 10.5 Å（容許範圍 8.5 ~ 12.5 Å）
+            if (dist >= 8.5 && dist <= 12.5) {
+              const diffFromIdeal = Math.abs(dist - 10.6);
+              if (diffFromIdeal < minDiff) {
+                minDiff = diffFromIdeal;
+                bestPair = r2.c1;
+              }
+            }
+          });
+
+          if (bestPair) {
+            ladderPairs.push([`@${r1.c1.index}`, `@${bestPair.index}`]);
           }
-        }
+        });
       }
       appState.ladderPairs = ladderPairs;
 
