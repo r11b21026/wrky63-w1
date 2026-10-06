@@ -47,19 +47,6 @@
       accent-color: #38bdf8;
     }
 
-    input[type=range]::-webkit-slider-thumb {
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
-    }
-
-    ::-webkit-scrollbar {
-      width: 4px;
-      height: 4px;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(56, 189, 248, 0.4);
-      border-radius: 4px;
-    }
-
     #axes-canvas {
       pointer-events: none;
     }
@@ -110,7 +97,7 @@
         <div><span class="text-slate-500">影格 (Frame):</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
       </div>
 
-      <!-- 渲染樣式選單 -->
+      <!-- 渲染樣式選單開關 -->
       <button id="btn-toggle-rep" title="幾何樣式與配色" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
         <i data-lucide="palette" class="w-4 h-4"></i>
         <span class="hidden sm:inline">樣式設定</span>
@@ -146,9 +133,9 @@
       </button>
     </div>
 
-    <!-- 繪製樣式 -->
-    <div class="mb-4">
-      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">蛋白質繪圖模式 (Protein Method)</label>
+    <!-- 蛋白質樣式 -->
+    <div class="mb-3">
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">蛋白質樣式 (Protein Style)</label>
       <div class="grid grid-cols-2 gap-1.5">
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon 卡通</button>
         <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice 管狀</button>
@@ -157,13 +144,22 @@
       </div>
     </div>
 
-    <!-- 配色方案 -->
+    <!-- DNA 樣式獨立切換 -->
     <div class="mb-3">
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">DNA 樣式 (DNA Style)</label>
+      <select id="dna-style-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
+        <option value="licorice" selected>Licorice 棒狀模型 (顯示鹼基骨架)</option>
+        <option value="cartoon">Cartoon 卡通絲帶 (簡約流線)</option>
+        <option value="spacefill">VDW 球體 (空間填補)</option>
+      </select>
+    </div>
+
+    <!-- 配色方案 -->
+    <div class="mb-2">
       <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">著色規則 (Coloring Method)</label>
       <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
         <option value="sstruc" selected>ResType / 二級結構 (Secondary Structure)</option>
         <option value="chainid">Chain ID 鏈編號</option>
-        <option value="resname">Residue Name 殘基類型</option>
         <option value="element">Element (CPK 原子顏色)</option>
         <option value="residueindex">Residue Index 漸層彩虹</option>
       </select>
@@ -193,23 +189,23 @@
 
         <!-- 步進 / 播放按鈕 -->
         <div class="flex items-center space-x-1 sm:space-x-2">
-          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="第一影格 (Home)">
+          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="第一影格">
             <i data-lucide="skip-back" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="倒退一格 (方向鍵左)">
+          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="倒退一格">
             <i data-lucide="step-back" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停 (空白鍵)">
+          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停">
             <i id="play-icon" data-lucide="play" class="w-5 h-5 fill-current"></i>
           </button>
 
-          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格 (方向鍵右)">
+          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格">
             <i data-lucide="step-forward" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="最後影格 (End)">
+          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="最後影格">
             <i data-lucide="skip-forward" class="w-4 h-4"></i>
           </button>
         </div>
@@ -274,12 +270,6 @@
       stage: null,
       component: null,
       trajComp: null,
-      // 各獨立圖層指標 (防止重複堆疊)
-      protRep: null,
-      dnaRep: null,
-      znRep: null,
-      coordRep: null,
-      
       totalFrames: 1,
       currentFrame: 0,
       isPlaying: false,
@@ -288,6 +278,7 @@
       fps: 20,
       timerId: null,
       repStyle: 'cartoon',
+      dnaStyle: 'licorice',
       colorScheme: 'sstruc',
       availableFiles: []
     };
@@ -314,6 +305,7 @@
       btnLoopMode: document.getElementById('btn-loop-mode'),
       loopLabel: document.getElementById('loop-label'),
       fpsSelect: document.getElementById('fps-select'),
+      dnaStyleSelect: document.getElementById('dna-style-select'),
       colorSelect: document.getElementById('color-select'),
       btnResetView: document.getElementById('btn-reset-view'),
       btnToggleRep: document.getElementById('btn-toggle-rep'),
@@ -398,89 +390,78 @@
     }
 
     /**
-     * 只抽換「蛋白質主體」圖層，絕不疊加，且 DNA 與鋅離子不會被洗掉
+     * 重建所有 Representation：確保乾淨無重疊！
      */
-    function updateProteinRepresentation() {
+    function applyAllRepresentations() {
       if (!appState.component) return;
 
-      // 如果先前已經有蛋白質圖層，精準單獨移除
-      if (appState.protRep) {
-        appState.component.removeRepresentation(appState.protRep);
-        appState.protRep = null;
-      }
+      // ★★★ 關鍵：每次切換都乾淨清空，杜絕殘留 ★★★
+      appState.component.removeAllRepresentations();
 
-      const rep = appState.repStyle;
+      const pRep = appState.repStyle;
+      const dRep = appState.dnaStyle;
       const color = appState.colorScheme;
 
-      // 建立新的單一蛋白質圖層
-      if (rep === 'cartoon') {
-        appState.protRep = appState.component.addRepresentation('cartoon', {
+      // 1. 蛋白質主體 (僅針對 protein，絕不繪製多餘的 within 殘基)
+      if (pRep === 'cartoon') {
+        appState.component.addRepresentation('cartoon', {
           sele: 'protein',
           colorScheme: color,
           aspectRatio: 3.2,
           scale: 0.8,
           smoothSheet: true
         });
-      } else if (rep === 'licorice') {
-        appState.protRep = appState.component.addRepresentation('licorice', {
+      } else if (pRep === 'licorice') {
+        appState.component.addRepresentation('licorice', {
           sele: 'protein',
           colorScheme: color,
           radius: 0.22
         });
-      } else if (rep === 'spacefill') {
-        appState.protRep = appState.component.addRepresentation('spacefill', {
+      } else if (pRep === 'spacefill') {
+        appState.component.addRepresentation('spacefill', {
           sele: 'protein',
           colorScheme: color,
           scale: 0.85
         });
-      } else if (rep === 'ribbon') {
-        appState.protRep = appState.component.addRepresentation('ribbon', {
+      } else if (pRep === 'ribbon') {
+        appState.component.addRepresentation('ribbon', {
           sele: 'protein',
           colorScheme: color,
           scale: 1.4
         });
       }
-    }
 
-    /**
-     * 檔案剛載入時建立固定輔助圖層 (DNA + 鋅球 + 配位殘基)
-     */
-    function setupBaseRepresentations() {
-      if (!appState.component) return;
-
-      // 1. DNA 棒狀 (Licorice)
-      if (!appState.dnaRep) {
-        appState.dnaRep = appState.component.addRepresentation('licorice', {
+      // 2. DNA / 核酸 (依據使用者在下拉選單選擇的樣式獨立渲染)
+      if (dRep === 'licorice') {
+        appState.component.addRepresentation('licorice', {
           sele: 'nucleic',
           colorScheme: 'element',
-          radius: 0.22
+          radius: 0.24
         });
-      }
-
-      // 2. 鋅離子金屬大球體 (VDW Sphere)
-      if (!appState.znRep) {
-        appState.znRep = appState.component.addRepresentation('spacefill', {
-          sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
-          color: '#9ca3af',
-          scale: 1.3
+      } else if (dRep === 'cartoon') {
+        appState.component.addRepresentation('cartoon', {
+          sele: 'nucleic',
+          colorScheme: 'chainindex',
+          aspectRatio: 2.5
         });
-      }
-
-      // 3. 鋅指配位殘基側鏈 (Cys / His 棒狀圖)
-      if (!appState.coordRep) {
-        appState.coordRep = appState.component.addRepresentation('licorice', {
-          sele: 'within 3.2 of (@ZN or @ZN2 or :ZN or :ZN2 or zinc)',
+      } else if (dRep === 'spacefill') {
+        appState.component.addRepresentation('spacefill', {
+          sele: 'nucleic',
           colorScheme: 'element',
-          radius: 0.2
+          scale: 0.8
         });
       }
 
-      // 4. 繪製蛋白質主體
-      updateProteinRepresentation();
+      // 3. 鋅離子 (ZN)：只畫金屬原子球本體，乾淨俐落
+      appState.component.addRepresentation('spacefill', {
+        sele: '@ZN or @ZN2 or :ZN or :ZN2 or zinc',
+        color: '#9ca3af',
+        scale: 1.3
+      });
     }
 
     /**
-     * 載入 PDB 檔案
+     * 載入 PDB 檔案並掛載動畫 Trajectory
      */
     async function loadPdbFile(urlOrFile) {
       stopPlayback();
@@ -489,16 +470,12 @@
 
       try {
         appState.stage.removeAllComponents();
-        appState.protRep = null;
-        appState.dnaRep = null;
-        appState.znRep = null;
-        appState.coordRep = null;
 
         const comp = await appState.stage.loadFile(urlOrFile, { defaultRepresentation: false });
         appState.component = comp;
 
-        // 建立圖層
-        setupBaseRepresentations();
+        // 重新繪製結構
+        applyAllRepresentations();
         comp.autoView(500);
 
         const atomTotal = comp.structure.atomCount || 0;
@@ -733,7 +710,7 @@
         dom.repModal.classList.add('hidden');
       });
 
-      // ★★★ 關鍵：切換樣式時只精準抽換蛋白質主體，絕不疊加 ★★★
+      // 蛋白質樣式按鈕
       document.querySelectorAll('.rep-style-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.rep-style-btn').forEach(b => {
@@ -744,14 +721,20 @@
           btn.classList.remove('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
 
           appState.repStyle = btn.dataset.rep;
-          updateProteinRepresentation();
+          applyAllRepresentations();
         });
       });
 
-      // ★★★ 關鍵：切換配色時同步更新蛋白質 ★★★
+      // DNA 樣式下拉選單
+      dom.dnaStyleSelect.addEventListener('change', (e) => {
+        appState.dnaStyle = e.target.value;
+        applyAllRepresentations();
+      });
+
+      // 配色下拉選單
       dom.colorSelect.addEventListener('change', (e) => {
         appState.colorScheme = e.target.value;
-        updateProteinRepresentation();
+        applyAllRepresentations();
       });
 
       dom.btnInfo.addEventListener('click', () => dom.infoModal.classList.remove('hidden'));
