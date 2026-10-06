@@ -511,7 +511,7 @@
     }
 
     /**
-     * 重建所有 Representation (保證無報錯、鋅離子常駐、標準 VMD Ladder、局部特寫)
+     * 重建所有 Representation (徹底解決端點黏合 + 填補雙螺旋階梯橫竿)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -550,7 +550,7 @@
         });
       }
 
-      // 2. DNA 雙螺旋骨架絲帶 (正反兩股獨立繪製，永不相連閉環)
+      // 2. DNA 雙螺旋骨架絲帶 (分股獨立繪製，永不相連閉環)
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -566,26 +566,35 @@
         });
       }
 
-      // 3. DNA 鹼基階梯桿 (標準 VMD Ladder 效果：骨架插進鹼基環的實心棒 + 環形骨架)
+      // 3. DNA 階梯橫竿 (VMD Ladder 橫竿)
       if (dRep === 'vmd_ladder') {
-        // 從骨架 (C1') 延伸進去鹼基中心柱，串起整條雙螺旋階梯 (絕無全體雜亂化學鍵)
-        appState.component.addRepresentation('tube', {
-          sele: 'nucleic and not backbone and not hydrogen',
+        // (A) 正股各鹼基向內延伸的實心橫竿 (骨架 C1' -> 鹼基環核心)
+        // 使用 licorice 僅選取 C1' 與環核心，避免 Spline 曲線跨股黏合
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .N9 or .N1 or .C4 or .C6)',
           ...dColorParams,
           radius: 0.22,
-          subdiv: 6
+          multipleBond: 'off'
+        });
+
+        // (B) 鹼基環狀本體：保持簡潔圓管，填補中間空洞
+        appState.component.addRepresentation('licorice', {
+          sele: 'not protein and not backbone and not hydrogen and not resname ZN',
+          ...dColorParams,
+          radius: 0.18,
+          multipleBond: 'off'
         });
       } else if (dRep === 'licorice') {
-        // 使用者主動選 Licorice 才繪製全化學鍵
+        // 全 Licorice 模式
         appState.component.addRepresentation('licorice', {
-          sele: 'nucleic and not hydrogen',
+          sele: 'not protein and not hydrogen and not resname ZN',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 4. 鋅離子 (ZN)：金屬球常駐，不被任何條件影響
+      // 4. 鋅離子 (ZN)：常駐獨立金屬球
       appState.component.addRepresentation('spacefill', {
         sele: '_ZN or :ZN or [ZN] or zinc or (not protein and not nucleic and not hydrogen)',
         color: '#94a3b8',
@@ -595,7 +604,7 @@
       // 5. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
-          sele: 'nucleic and not hydrogen and (.C1\' or .C1*)',
+          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .C1*)',
           labelType: 'resname',
           color: '#f8fafc',
           scale: 1.2,
