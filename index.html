@@ -533,11 +533,12 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (真正的 VMD Ladder Rung：純淨實心橫柱，絕不畫出疊在一起的雜環)
+     // 3. DNA 階梯橫竿 (修正：將 ladderPairs 傳給 atomPair，並將 sele 設為字串)
       if (dRep === 'vmd_ladder') {
         if (appState.ladderPairs && appState.ladderPairs.length > 0) {
           appState.component.addRepresentation('distance', {
-            sele: appState.ladderPairs,
+            atomPair: appState.ladderPairs, // 正確屬性是 atomPair！
+            sele: 'all',                    // sele 必須是字串
             color: '#cbd5e1',
             radius: 0.22,
             labelVisible: false
