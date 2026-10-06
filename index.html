@@ -50,15 +50,6 @@
     #axes-canvas {
       pointer-events: none;
     }
-
-    .color-dot {
-      width: 16px;
-      height: 16px;
-      border-radius: 9999px;
-      display: inline-block;
-      margin-right: 6px;
-      border: 1px solid rgba(255,255,255,0.4);
-    }
   </style>
 </head>
 <body class="w-screen h-screen relative bg-[#0b0f19]">
@@ -100,7 +91,7 @@
     <div class="flex items-center space-x-2 pointer-events-auto">
       
       <!-- 一鍵結合口袋特寫按鈕 -->
-      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket (放大 + 介面氫鍵)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫蛋白質與 DNA 結合 Pocket" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -201,13 +192,13 @@
       </div>
     </div>
 
-    <!-- 鋅離子狀態 -->
+    <!-- 鋅離子說明 -->
     <div class="p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs font-mono-vmd text-slate-300">
       <div class="flex items-center space-x-2">
-        <span class="w-3.5 h-3.5 rounded-full bg-slate-300 border border-white shadow"></span>
+        <span class="w-3.5 h-3.5 rounded-full bg-slate-400 border border-slate-200 shadow"></span>
         <span>鋅離子 (Zinc, Zn²⁺)</span>
       </div>
-      <span class="text-cyan-400 font-bold">高亮金屬球</span>
+      <span class="text-cyan-400 font-bold">金屬灰球</span>
     </div>
   </div>
 
@@ -272,7 +263,7 @@
       <div class="space-y-2 text-xs text-slate-300 leading-relaxed">
         <p>• <strong>單指滑動：</strong>3D 任意旋轉</p>
         <p>• <strong>雙指捏合：</strong>放大 / 縮小</p>
-        <p>• <strong>結合區特寫：</strong>一鍵平滑推進鏡頭至結合口袋，並高亮跨分子界面氫鍵</p>
+        <p>• <strong>結合區特寫：</strong>平滑推進鏡頭至口袋並顯示跨分子氫鍵</p>
       </div>
     </div>
   </div>
@@ -397,9 +388,6 @@
       }
     }
 
-    /**
-     * 輔助函式：判斷顏色參數是預設模式還是自訂 Hex 顏色
-     */
     function getColorParams(colorVal) {
       if (colorVal.startsWith('#')) {
         return { color: colorVal };
@@ -408,7 +396,7 @@
     }
 
     /**
-     * 重建所有 Representation
+     * 重建所有 Representation (安全精準選取，杜絕全選白球)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -475,35 +463,28 @@
         });
       }
 
-      // 3. 鋅離子 (ZN)：最大寬容度選取 + 高反差銀灰色大球體
+      // 3. 鋅離子 (ZN)：★ 徹底修復為安全嚴格選取，絕不誤判全選 ★
       appState.component.addRepresentation('spacefill', {
-        sele: '@ZN or @ZN2 or :ZN or :ZN2 or [ZN] or [ZN2] or zinc or .ZN or resname ZN ZN2',
-        color: '#e2e8f0',
-        scale: 1.5
+        sele: '_ZN or :ZN or :ZN2 or [ZN] or [ZN2] or zinc',
+        color: '#94a3b8',
+        scale: 1.2
       });
 
-      // 4. 鋅指配位半胱胺酸／組胺酸側鏈 (Cys/His 棒狀圖)
-      appState.component.addRepresentation('licorice', {
-        sele: 'within 3.0 of (@ZN or @ZN2 or :ZN or :ZN2 or [ZN] or [ZN2] or zinc or .ZN or resname ZN ZN2)',
-        colorScheme: 'element',
-        radius: 0.2
-      });
-
-      // 5. 若開啟「結合區特寫模式」：只突顯界面側鏈與跨分子氫鍵
+      // 4. 若開啟「結合區特寫模式」：只突顯界面側鏈與跨分子氫鍵
       if (appState.isFocusingInterface) {
         // (A) 高亮介面蛋白質側鏈與鹼基
         appState.component.addRepresentation('licorice', {
           sele: '(protein and within 4.0 of nucleic) and not backbone',
           colorScheme: 'element',
-          radius: 0.24
+          radius: 0.22
         });
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic and within 4.0 of protein',
           colorScheme: 'element',
-          radius: 0.24
+          radius: 0.22
         });
 
-        // (B) 跨分子極性交互作用 (只在 protein 與 nucleic 之間計算)
+        // (B) 跨分子極性交互作用 (僅 protein 與 nucleic 之間)
         appState.component.addRepresentation('contact', {
           sele: 'protein',
           filterSele: 'nucleic',
@@ -515,7 +496,7 @@
     }
 
     /**
-     * 一鍵鏡頭特寫蛋白質與 DNA 結合口袋 (強制平滑放大推進)
+     * 一鍵鏡頭特寫蛋白質與 DNA 結合口袋
      */
     function toggleFocusInterface() {
       if (!appState.component) return;
@@ -524,16 +505,13 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        // 定義結合口袋範圍
-        const interfaceSele = '(protein and within 4.5 of nucleic) or (nucleic and within 4.5 of protein)';
-        
-        // 平滑推進鏡頭 (放大至口袋區域)
+        // 取得介面原子並平滑縮放推近
+        const interfaceSele = '(protein and within 4.2 of nucleic) or (nucleic and within 4.2 of protein)';
         appState.component.autoView(interfaceSele, 800);
 
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
       } else {
-        // 重設整體視野
         appState.component.autoView(600);
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '結合區特寫';
@@ -758,7 +736,6 @@
         if (appState.component) appState.component.autoView(500);
       });
 
-      // 一鍵結合界面特寫
       dom.btnFocusInterface.addEventListener('click', toggleFocusInterface);
 
       dom.btnToggleRep.addEventListener('click', () => {
@@ -768,7 +745,7 @@
         dom.repModal.classList.add('hidden');
       });
 
-      // 蛋白質樣式與顏色切換
+      // 蛋白質樣式與配色
       dom.proteinStyleSelect.addEventListener('change', (e) => {
         appState.protStyle = e.target.value;
         applyAllRepresentations();
@@ -778,7 +755,7 @@
         applyAllRepresentations();
       });
 
-      // DNA 樣式與顏色切換
+      // DNA 樣式與配色
       dom.dnaStyleSelect.addEventListener('change', (e) => {
         appState.dnaStyle = e.target.value;
         applyAllRepresentations();
