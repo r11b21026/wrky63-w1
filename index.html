@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VMD Web Trajectory Player</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- NGL Viewer library for robust molecular rendering & trajectory streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.0-dev.37/dist/ngl.js"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --vmd-bg: #0b0f19;
+      --vmd-panel: rgba(18, 24, 38, 0.88);
+      --vmd-border: rgba(56, 189, 248, 0.22);
+      --vmd-cyan: #38bdf8;
+      --vmd-teal: #14b8a6;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--vmd-bg);
+      color: #e2e8f0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    .font-mono-vmd {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* VMD Glassmorphism HUD Style */
+    .vmd-panel {
+      background: var(--vmd-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--vmd-border);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    }
+
+    /* Range slider custom styling */
+    input[type=range] {
+      accent-color: #38bdf8;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.3);
+      border-radius: 4px;
+    }
+
+    /* Coordinate Axis Canvas */
+    #axes-canvas {
+      pointer-events: none;
+    }
+
+    /* Smooth glow */
+    .vmd-glow {
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+  </style>
+</head>
+
+<body class="w-screen h-screen overflow-hidden relative select-none">
+
+  <div id="viewport" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
+
+  <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Left: VMD Title & Model Status Info -->
+    <div class="vmd-panel rounded-xl px-3.5 py-2 flex items-center space-x-3 pointer-events-auto shadow-lg">
+      <div class="flex items-center space-x-2 border-r border-slate-700/80 pr-3">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span class="font-mono-vmd font-bold text-sm tracking-wider text-cyan-400">VMD-WEB</span>
+      </div>
+      <div class="flex items-center space-x-3 font-mono-vmd text-xs text-slate-300">
+        <div><span class="text-slate-500">ID:</span> <span id="model-name" class="text-slate-100 font-semibold">1CRN (Crambin MD Sim)</span></div>
+        <div class="hidden sm:block"><span class="text-slate-500">ATOMS:</span> <span id="atom-count" class="text-slate-200">642</span></div>
+        <div><span class="text-slate-500">FRAME:</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 29</span></div>
+        <div class="hidden md:block"><span class="text-slate-500">TIME:</span> <span id="sim-time" class="text-slate-200">0.00 ns</span></div>
+      </div>
+    </div>
+
+    <!-- Right: Quick Action Buttons -->
+    <div class="flex items-center space-x-2 pointer-events-auto">
+      <button id="btn-toggle-rep" title="Representations & Colors" class="vmd-panel hover:bg-slate-800/90 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition-all">
+        <i data-lucide="layers" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Graphics</span>
+      </button>
+
+      <button id="btn-open-file" title="Load custom PDB/XTC trajectory" class="vmd-panel hover:bg-slate-800/90 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition-all">
+        <i data-lucide="folder-open" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">Load Traj</span>
+      </button>
+
+      <button id="btn-reset-view" title="Reset View & Center (VMD hotkey: r)" class="vmd-panel hover:bg-slate-800/90 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition-all">
+        <i data-lucide="focus" class="w-4 h-4"></i>
+      </button>
+
+      <button id="btn-info" title="VMD Guide & Poster Tips" class="vmd-panel hover:bg-slate-800/90 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition-all">
+        <i data-lucide="help-circle" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="absolute bottom-28 left-4 z-10 flex flex-col items-center pointer-events-none">
+    <canvas id="axes-canvas" width="80" height="80" class="drop-shadow-md"></canvas>
+    <span class="font-mono-vmd text-[10px] text-slate-400 font-bold tracking-widest mt-[-6px]">VMD AXES</span>
+  </div>
+
+  <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-80 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="palette" class="w-4 h-4 text-cyan-400"></i>
+        <h3 class="text-sm font-semibold text-slate-100">Graphical Representations</h3>
+      </div>
+      <button id="btn-close-rep" class="text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Drawing Method Selection -->
+    <div class="mb-4">
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase">Drawing Method</label>
+      <div class="grid grid-cols-2 gap-1.5">
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice (Bonds)</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="surface">QuickSurf</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="spacefill">VDW (Spheres)</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="trace">Trace</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="backbone">Backbone</button>
+      </div>
+    </div>
+
+    <!-- Coloring Method Selection -->
+    <div class="mb-4">
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase">Coloring Method</label>
+      <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
+        <option value="sstruc" selected>ResType / Secondary Structure (VMD)</option>
+        <option value="chainid">Chain ID</option>
+        <option value="resname">Residue Name / Type</option>
+        <option value="element">Element (CPK)</option>
+        <option value="atomindex">Trajectory / Index Rainbow</option>
+        <option value="hydrophobicity">Hydrophobicity</option>
+      </select>
+    </div>
+
+    <!-- Trajectory Presets -->
+    <div>
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase">Load Presets</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btn-load-crambin" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg font-medium border border-slate-700 transition">
+          Crambin MD (Oscillate)
+        </button>
+        <button id="btn-load-helix" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg font-medium border border-slate-700 transition">
+          Deca-Alanine (Helix Wave)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input-pdb" accept=".pdb,.ent,.cif" class="hidden" />
+  <input type="file" id="file-input-traj" accept=".xtc,.dcd,.trr" class="hidden" />
+
+  <!-- Hidden Custom Load Modal -->
+  <div id="upload-modal" class="hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="vmd-panel max-w-md w-full rounded-2xl p-5 shadow-2xl border border-cyan-500/30">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-4">
+        <h3 class="text-sm font-semibold text-slate-100 flex items-center space-x-2">
+          <i data-lucide="upload-cloud" class="w-4 h-4 text-cyan-400"></i>
+          <span>Load Molecular Trajectory</span>
+        </h3>
+        <button id="btn-close-upload" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      
+      <p class="text-xs text-slate-300 leading-relaxed mb-4">
+        You can upload a single <strong>Multi-model PDB</strong> (containing multiple <code class="text-cyan-400">MODEL ... ENDMDL</code> steps) or a combination of <strong>Topology (.pdb) + Trajectory (.xtc)</strong>.
+      </p>
+
+      <div class="space-y-3">
+        <button id="btn-choose-multimodel" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition text-xs">
+          <span class="flex items-center space-x-2 text-slate-200">
+            <i data-lucide="file-code" class="w-4 h-4 text-cyan-400"></i>
+            <span>Upload Multi-Model PDB (Frames inside)</span>
+          </span>
+          <span class="text-[10px] bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800">Best for Posters</span>
+        </button>
+
+        <button id="btn-choose-pair" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition text-xs">
+          <span class="flex items-center space-x-2 text-slate-200">
+            <i data-lucide="layers-3" class="w-4 h-4 text-teal-400"></i>
+            <span>Upload PDB + Separate XTC</span>
+          </span>
+          <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">Native Trajectory</span>
+        </button>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+        <span>Files stay 100% in your local browser memory.</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
+    <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
+      
+      <!-- Upper row: Scrubber & Frame Slider -->
+      <div class="flex items-center space-x-3 w-full">
+        <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-10 text-right" id="slider-curr-frame">0</span>
+        <input id="trajectory-slider" type="range" min="0" max="29" value="0" step="1" 
+               class="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:outline-none" />
+        <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-10 text-left" id="slider-total-frame">29</span>
+      </div>
+
+      <!-- Lower row: VMD Transport Controls -->
+      <div class="flex items-center justify-between w-full pt-1">
+        
+        <!-- Loop Mode Selector (Once / Loop / Rock) -->
+        <div class="flex items-center space-x-1 bg-slate-900/80 p-1 rounded-xl border border-slate-700/60">
+          <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold text-cyan-400 hover:text-white transition flex items-center space-x-1" title="Playback Loop Mode">
+            <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+            <span id="loop-label">LOOP</span>
+          </button>
+        </div>
+
+        <!-- Center Player Transport Controls -->
+        <div class="flex items-center space-x-1.5 sm:space-x-2">
+          <!-- Step to start -->
+          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="First Frame (Home)">
+            <i data-lucide="skip-back" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Step Back 1 Frame -->
+          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Step Reverse (Ctrl + ,)">
+            <i data-lucide="step-back" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Reverse Play -->
+          <button id="btn-play-rev" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Play Reverse">
+            <i data-lucide="play" class="w-4 h-4 transform rotate-180"></i>
+          </button>
+
+          <!-- Main Play / Pause Button -->
+          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95" title="Play / Pause (Spacebar)">
+            <i id="play-icon" data-lucide="play" class="w-5 h-5 fill-current"></i>
+          </button>
+
+          <!-- Step Forward 1 Frame -->
+          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Step Forward (Ctrl + .)">
+            <i data-lucide="step-forward" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Step to End -->
+          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Last Frame (End)">
+            <i data-lucide="skip-forward" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Speed / FPS Control -->
+        <div class="flex items-center space-x-1.5">
+          <i data-lucide="gauge" class="w-3.5 h-3.5 text-slate-400 hidden sm:inline"></i>
+          <select id="fps-select" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none" title="Trajectory Playback Speed">
+            <option value="10">10 FPS</option>
+            <option value="20" selected>20 FPS</option>
+            <option value="30">30 FPS</option>
+            <option value="60">60 FPS</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+  </footer>
+
+  <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="vmd-panel max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-700">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-4">
+        <h3 class="text-sm font-bold text-cyan-400 flex items-center space-x-2">
+          <i data-lucide="terminal" class="w-4 h-4"></i>
+          <span>VMD Web Touch & Controls Manual</span>
+        </h3>
+        <button id="btn-close-info" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="space-y-4 text-xs text-slate-300 leading-relaxed font-sans">
+        <div>
+          <h4 class="font-bold text-white mb-1.5 flex items-center space-x-1">
+            <i data-lucide="smartphone" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Mobile / Touch Gestures</span>
+          </h4>
+          <ul class="list-disc pl-5 space-y-1 text-slate-300">
+            <li><strong>1 Finger Drag:</strong> Rotate molecular model in 3D</li>
+            <li><strong>2 Finger Pinch:</strong> Zoom In / Zoom Out</li>
+            <li><strong>2 Finger Drag:</strong> Pan / Translate structure across view</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-white mb-1.5 flex items-center space-x-1">
+            <i data-lucide="mouse-pointer" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Desktop Mouse & Keyboard</span>
+          </h4>
+          <ul class="list-disc pl-5 space-y-1 text-slate-300">
+            <li><strong>Left Drag:</strong> Rotate</li>
+            <li><strong>Scroll Wheel:</strong> Zoom</li>
+            <li><strong>Right Drag:</strong> Pan</li>
+            <li><strong>Spacebar:</strong> Play / Pause trajectory</li>
+          </ul>
+        </div>
+
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <h4 class="font-bold text-cyan-300 mb-1">Poster Presentation Tip (QR Code)</h4>
+          <p class="text-slate-400 text-[11px]">
+            In academic poster sessions, upload your representative Multi-model PDB (or stride-reduced trajectory &lt; 3MB) to GitHub Pages. Attendees scanning your QR code get this exact VMD visual experience directly on their phones with zero app installation.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State management
+    const appState = {
+      stage: null,
+      component: null,
+      trajComp: null,
+      totalFrames: 30,
+      currentFrame: 0,
+      isPlaying: false,
+      playbackDirection: 1, // 1: forward, -1: reverse
+      loopMode: 'loop',     // 'once', 'loop', 'rock'
+      fps: 20,
+      timerId: null,
+      repStyle: 'cartoon',
+      colorScheme: 'sstruc',
+      representations: []
+    };
+
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // DOM Elements
+    const dom = {
+      viewport: document.getElementById('viewport'),
+      frameCounter: document.getElementById('frame-counter'),
+      simTime: document.getElementById('sim-time'),
+      modelName: document.getElementById('model-name'),
+      atomCount: document.getElementById('atom-count'),
+      slider: document.getElementById('trajectory-slider'),
+      sliderCurr: document.getElementById('slider-curr-frame'),
+      sliderTotal: document.getElementById('slider-total-frame'),
+      btnPlay: document.getElementById('btn-play'),
+      btnPlayRev: document.getElementById('btn-play-rev'),
+      btnPrevFrame: document.getElementById('btn-prev-frame'),
+      btnNextFrame: document.getElementById('btn-next-frame'),
+      btnFirstFrame: document.getElementById('btn-first-frame'),
+      btnLastFrame: document.getElementById('btn-last-frame'),
+      btnLoopMode: document.getElementById('btn-loop-mode'),
+      loopLabel: document.getElementById('loop-label'),
+      fpsSelect: document.getElementById('fps-select'),
+      colorSelect: document.getElementById('color-select'),
+      btnResetView: document.getElementById('btn-reset-view'),
+      btnToggleRep: document.getElementById('btn-toggle-rep'),
+      repModal: document.getElementById('rep-modal'),
+      btnCloseRep: document.getElementById('btn-close-rep'),
+      btnOpenFile: document.getElementById('btn-open-file'),
+      uploadModal: document.getElementById('upload-modal'),
+      btnCloseUpload: document.getElementById('btn-close-upload'),
+      btnChooseMulti: document.getElementById('btn-choose-multimodel'),
+      btnChoosePair: document.getElementById('btn-choose-pair'),
+      fileInputPdb: document.getElementById('file-input-pdb'),
+      fileInputTraj: document.getElementById('file-input-traj'),
+      btnInfo: document.getElementById('btn-info'),
+      infoModal: document.getElementById('info-modal'),
+      btnCloseInfo: document.getElementById('btn-close-info'),
+      axesCanvas: document.getElementById('axes-canvas'),
+      btnLoadCrambin: document.getElementById('btn-load-crambin'),
+      btnLoadHelix: document.getElementById('btn-load-helix')
+    };
+
+    // Generates a multi-model PDB string with oscillatory dynamic motion (simulating MD trajectory)
+    function generateDynamicHelixTrajectory(numModels = 30) {
+      // 10 residue poly-alanine alpha helix with dynamic wave deformation
+      const residues = ['ALA', 'ALA', 'LEU', 'GLU', 'LYS', 'VAL', 'GLN', 'HIS', 'ARG', 'PHE'];
+      const pdbLines = [];
+
+      for (let m = 0; m < numModels; m++) {
+        pdbLines.push(`MODEL     ${String(m + 1).padStart(4, ' ')}`);
+        let atomIndex = 1;
+        const phase = (m / numModels) * Math.PI * 2;
+
+        for (let i = 0; i < residues.length; i++) {
+          const resName = residues[i];
+          const zBase = i * 1.5;
+          const theta = i * 1.745; // ~100 deg pitch per residue
+
+          // Add simulated MD harmonic bending/vibration
+          const bendX = Math.sin(phase + i * 0.4) * 1.2;
+          const bendY = Math.cos(phase + i * 0.3) * 0.9;
+
+          const nX = (Math.cos(theta) * 2.3 + bendX).toFixed(3);
+          const nY = (Math.sin(theta) * 2.3 + bendY).toFixed(3);
+          const nZ = (zBase).toFixed(3);
+
+          const caX = (Math.cos(theta + 0.3) * 2.5 + bendX).toFixed(3);
+          const caY = (Math.sin(theta + 0.3) * 2.5 + bendY).toFixed(3);
+          const caZ = (zBase + 0.5).toFixed(3);
+
+          const cX = (Math.cos(theta + 0.6) * 2.4 + bendX).toFixed(3);
+          const cY = (Math.sin(theta + 0.6) * 2.4 + bendY).toFixed(3);
+          const cZ = (zBase + 1.0).toFixed(3);
+
+          const oX = (Math.cos(theta + 0.7) * 3.2 + bendX).toFixed(3);
+          const oY = (Math.sin(theta + 0.7) * 3.2 + bendY).toFixed(3);
+          const oZ = (zBase + 1.1).toFixed(3);
+
+          const cbX = (Math.cos(theta + 0.3) * 3.8 + bendX).toFixed(3);
+          const cbY = (Math.sin(theta + 0.3) * 3.8 + bendY).toFixed(3);
+          const cbZ = (zBase + 0.6).toFixed(3);
+
+          const fmt = (idx, name, res, rIdx, x, y, z, elem) => 
+            `ATOM  ${String(idx).padStart(5, ' ')} ${name.padEnd(4, ' ')} ${res} A${String(rIdx).padStart(4, ' ')}    ${String(x).padStart(8, ' ')}${String(y).padStart(8, ' ')}${String(z).padStart(8, ' ')}  1.00 20.00          ${elem.padStart(2, ' ')}`;
+
+          pdbLines.push(fmt(atomIndex++, 'N', resName, i + 1, nX, nY, nZ, 'N'));
+          pdbLines.push(fmt(atomIndex++, 'CA', resName, i + 1, caX, caY, caZ, 'C'));
+          pdbLines.push(fmt(atomIndex++, 'C', resName, i + 1, cX, cY, cZ, 'C'));
+          pdbLines.push(fmt(atomIndex++, 'O', resName, i + 1, oX, oY, oZ, 'O'));
+          pdbLines.push(fmt(atomIndex++, 'CB', resName, i + 1, cbX, cbY, cbZ, 'C'));
+        }
+        pdbLines.push(`ENDMDL`);
+      }
+      return pdbLines.join('\n');
+    }
+
+    function initNglViewer() {
+      // VMD classic background: dark slate navy
+      appState.stage = new NGL.Stage('viewport', {
+        backgroundColor: '#0b0f19',
+        cameraType: 'perspective',
+        ambientColor: 0xffffff,
+        ambientIntensity: 0.35,
+        lightColor: 0xffffff,
+        lightIntensity: 0.85,
+        fogNear: 60,
+        fogFar: 100,
+        sampleLevel: 1 // smooth quality
+      });
+
+      // Handle window resizing
+      window.addEventListener('resize', () => {
+        appState.stage.handleResize();
+        drawVmdAxes();
+      });
+
+      // Track stage orientation change to sync coordinate axes tripod
+      appState.stage.viewerControls.signals.changed.add(() => {
+        drawVmdAxes();
+      });
+
+      // Load initial model (Crambin 1CRN simulated trajectory)
+      loadCrambinDemo();
+    }
+
+    async function loadCrambinDemo() {
+      stopPlayback();
+      appState.stage.removeAllComponents();
+
+      dom.modelName.textContent = '1CRN (Crambin MD Ensemble)';
+      dom.atomCount.textContent = '327';
+
+      try {
+        // Load base structure from RCSB
+        const comp = await appState.stage.loadFile('rcsb://1CRN', { defaultRepresentation: false });
+        appState.component = comp;
+        
+        // Setup representation
+        applyVmdRepresentation();
+        comp.autoView();
+
+        // Create an in-memory dynamic trajectory by perturbing coordinates smoothly across 30 frames
+        const structure = comp.structure;
+        const coords = structure.atomStore.coordinates;
+        const numAtoms = coords.length / 3;
+        const numFrames = 30;
+        appState.totalFrames = numFrames;
+
+        const trajFrames = [];
+        for (let f = 0; f < numFrames; f++) {
+          const frameCoords = new Float32Array(coords.length);
+          const t = (f / numFrames) * Math.PI * 2;
+          
+          for (let a = 0; a < numAtoms; a++) {
+            const idx = a * 3;
+            const x = coords[idx];
+            const y = coords[idx + 1];
+            const z = coords[idx + 2];
+
+            // Harmonic MD oscillation based on distance from center
+            const dist = Math.sqrt(x*x + y*y + z*z) * 0.15;
+            const dX = Math.sin(t + dist) * (0.8 + 0.05 * dist);
+            const dY = Math.cos(t + dist * 1.2) * (0.7 + 0.04 * dist);
+            const dZ = Math.sin(t * 2 + dist * 0.5) * 0.5;
+
+            frameCoords[idx] = x + dX;
+            frameCoords[idx + 1] = y + dY;
+            frameCoords[idx + 2] = z + dZ;
+          }
+          trajFrames.push(frameCoords);
+        }
+
+        // Attach custom Trajectory to the component
+        const fakeTraj = {
+          frameCount: numFrames,
+          getFrame: function(idx, callback) {
+            callback(trajFrames[idx]);
+          }
+        };
+
+        const trajComp = comp.addTrajectory(fakeTraj);
+        appState.trajComp = trajComp;
+
+        // Sync UI
+        setupTrajectoryUI(numFrames);
+        startPlayback();
+
+      } catch (err) {
+        console.warn('Could not load online PDB, falling back to synthetic helix:', err);
+        loadHelixDemo();
+      }
+    }
+
+    async function loadHelixDemo() {
+      stopPlayback();
+      appState.stage.removeAllComponents();
+
+      dom.modelName.textContent = 'Deca-Alanine (Simulated Helix)';
+      dom.atomCount.textContent = '50';
+
+      const pdbData = generateDynamicHelixTrajectory(30);
+      const stringBlob = new Blob([pdbData], { type: 'text/plain' });
+
+      const comp = await appState.stage.loadFile(stringBlob, { ext: 'pdb', defaultRepresentation: false });
+      appState.component = comp;
+
+      applyVmdRepresentation();
+      comp.autoView();
+
+      const numFrames = comp.structure.modelStore.count || 30;
+      appState.totalFrames = numFrames;
+
+      const trajComp = comp.addTrajectory();
+      appState.trajComp = trajComp;
+
+      setupTrajectoryUI(numFrames);
+      startPlayback();
+    }
+
+    function applyVmdRepresentation() {
+      if (!appState.component) return;
+
+      // Clear existing representations
+      appState.component.removeAllRepresentations();
+      appState.representations = [];
+
+      const colorScheme = appState.colorScheme;
+      const repStyle = appState.repStyle;
+
+      let rep;
+      switch (repStyle) {
+        case 'cartoon':
+          rep = appState.component.addRepresentation('cartoon', {
+            colorScheme: colorScheme,
+            aspectRatio: 3.5,
+            scale: 0.8,
+            smoothSheet: true
+          });
+          break;
+        case 'licorice':
+          rep = appState.component.addRepresentation('licorice', {
+            colorScheme: colorScheme,
+            radius: 0.22,
+            multipleBond: 'symmetric'
+          });
+          break;
+        case 'surface':
+          rep = appState.component.addRepresentation('surface', {
+            colorScheme: colorScheme,
+            surfaceType: 'ms',
+            probeRadius: 1.4,
+            opacity: 0.88,
+            wireframe: false
+          });
+          break;
+        case 'spacefill':
+          rep = appState.component.addRepresentation('spacefill', {
+            colorScheme: colorScheme,
+            scale: 0.85
+          });
+          break;
+        case 'trace':
+          rep = appState.component.addRepresentation('trace', {
+            colorScheme: colorScheme,
+            subdiv: 12
+          });
+          break;
+        case 'backbone':
+          rep = appState.component.addRepresentation('backbone', {
+            colorScheme: colorScheme,
+            radius: 0.3
+          });
+          break;
+        default:
+          rep = appState.component.addRepresentation('cartoon', { colorScheme: colorScheme });
+      }
+
+      appState.representations.push(rep);
+    }
+
+    function setupTrajectoryUI(frameCount) {
+      appState.totalFrames = frameCount;
+      dom.slider.max = frameCount - 1;
+      dom.slider.value = 0;
+      dom.sliderTotal.textContent = String(frameCount - 1);
+      setFrame(0);
+    }
+
+    function setFrame(frameIndex) {
+      if (!appState.trajComp) return;
+      const maxF = appState.totalFrames - 1;
+      let target = Math.max(0, Math.min(frameIndex, maxF));
+      
+      appState.currentFrame = target;
+      appState.trajComp.setFrame(target);
+
+      // Update DOM
+      dom.frameCounter.textContent = `${target} / ${maxF}`;
+      dom.slider.value = target;
+      dom.sliderCurr.textContent = target;
+
+      // Approximate sim time (assume 50ps per frame for demo)
+      const simNs = (target * 0.05).toFixed(2);
+      dom.simTime.textContent = `${simNs} ns`;
+    }
+
+    function stepFrame(delta) {
+      let next = appState.currentFrame + delta;
+      const max = appState.totalFrames - 1;
+
+      if (next > max) {
+        if (appState.loopMode === 'loop') {
+          next = 0;
+        } else if (appState.loopMode === 'rock') {
+          appState.playbackDirection = -1;
+          next = Math.max(0, max - 1);
+        } else {
+          stopPlayback();
+          return;
+        }
+      } else if (next < 0) {
+        if (appState.loopMode === 'loop') {
+          next = max;
+        } else if (appState.loopMode === 'rock') {
+          appState.playbackDirection = 1;
+          next = Math.min(max, 1);
+        } else {
+          stopPlayback();
+          return;
+        }
+      }
+      setFrame(next);
+    }
+
+    function startPlayback(direction = 1) {
+      if (appState.isPlaying && appState.playbackDirection === direction) return;
+      stopPlayback();
+      appState.isPlaying = true;
+      appState.playbackDirection = direction;
+
+      const icon = dom.btnPlay.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'pause');
+        lucide.createIcons();
+      }
+
+      const intervalMs = Math.round(1000 / appState.fps);
+      appState.timerId = setInterval(() => {
+        stepFrame(appState.playbackDirection);
+      }, intervalMs);
+    }
+
+    function stopPlayback() {
+      appState.isPlaying = false;
+      if (appState.timerId) {
+        clearInterval(appState.timerId);
+        appState.timerId = null;
+      }
+      const icon = dom.btnPlay.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', 'play');
+        lucide.createIcons();
+      }
+    }
+
+    function togglePlay() {
+      if (appState.isPlaying) {
+        stopPlayback();
+      } else {
+        startPlayback(1);
+      }
+    }
+
+    // Faithful VMD RGB axis: X = Red, Y = Green, Z = Blue
+    function drawVmdAxes() {
+      const canvas = dom.axesCanvas;
+      if (!canvas || !appState.stage) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Extract camera rotation matrix from NGL viewer
+      const rot = appState.stage.viewerControls.getOrientation();
+      // Use rotation matrix components (rot is 16-element Float32Array)
+      const r00 = rot[0], r01 = rot[1], r02 = rot[2];
+      const r10 = rot[4], r11 = rot[5], r12 = rot[6];
+      const r20 = rot[8], r21 = rot[9], r22 = rot[10];
+
+      const centerX = w / 2;
+      const centerY = h / 2;
+      const length = 26;
+
+      // Project axes in camera space
+      const axes = [
+        { label: 'X', color: '#ef4444', x: r00 * length, y: -r01 * length, z: r02 },
+        { label: 'Y', color: '#22c55e', x: r10 * length, y: -r11 * length, z: r12 },
+        { label: 'Z', color: '#3b82f6', x: r20 * length, y: -r21 * length, z: r22 }
+      ];
+
+      // Sort by depth (Z) for correct painter's algorithm
+      axes.sort((a, b) => a.z - b.z);
+
+      // Draw each axis line and label
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.font = 'bold 10px JetBrains Mono, monospace';
+
+      axes.forEach(axis => {
+        ctx.strokeStyle = axis.color;
+        ctx.fillStyle = axis.color;
+
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        const endX = centerX + axis.x;
+        const endY = centerY + axis.y;
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Draw label offset from endpoint
+        const offset = 6;
+        const mag = Math.sqrt(axis.x * axis.x + axis.y * axis.y) || 1;
+        const labelX = endX + (axis.x / mag) * offset;
+        const labelY = endY + (axis.y / mag) * offset + 3;
+
+        ctx.fillText(axis.label, labelX - 3, labelY);
+      });
+
+      // Draw center pivot dot
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function bindEventListeners() {
+      // Play / Pause
+      dom.btnPlay.addEventListener('click', togglePlay);
+      
+      // Reverse Play
+      dom.btnPlayRev.addEventListener('click', () => {
+        if (appState.isPlaying && appState.playbackDirection === -1) {
+          stopPlayback();
+        } else {
+          startPlayback(-1);
+        }
+      });
+
+      // Step Controls
+      dom.btnPrevFrame.addEventListener('click', () => {
+        stopPlayback();
+        stepFrame(-1);
+      });
+      dom.btnNextFrame.addEventListener('click', () => {
+        stopPlayback();
+        stepFrame(1);
+      });
+      dom.btnFirstFrame.addEventListener('click', () => {
+        stopPlayback();
+        setFrame(0);
+      });
+      dom.btnLastFrame.addEventListener('click', () => {
+        stopPlayback();
+        setFrame(appState.totalFrames - 1);
+      });
+
+      // Scrubber slider
+      dom.slider.addEventListener('input', (e) => {
+        stopPlayback();
+        setFrame(parseInt(e.target.value, 10));
+      });
+
+      // Loop mode toggle: Once -> Loop -> Rock
+      dom.btnLoopMode.addEventListener('click', () => {
+        if (appState.loopMode === 'loop') {
+          appState.loopMode = 'rock';
+          dom.loopLabel.textContent = 'ROCK';
+        } else if (appState.loopMode === 'rock') {
+          appState.loopMode = 'once';
+          dom.loopLabel.textContent = 'ONCE';
+        } else {
+          appState.loopMode = 'loop';
+          dom.loopLabel.textContent = 'LOOP';
+        }
+      });
+
+      // FPS Change
+      dom.fpsSelect.addEventListener('change', (e) => {
+        appState.fps = parseInt(e.target.value, 10);
+        if (appState.isPlaying) {
+          startPlayback(appState.playbackDirection);
+        }
+      });
+
+      // Reset / Center View
+      dom.btnResetView.addEventListener('click', () => {
+        if (appState.component) {
+          appState.component.autoView(600);
+        }
+      });
+
+      // Representation panel toggle
+      dom.btnToggleRep.addEventListener('click', () => {
+        dom.repModal.classList.toggle('hidden');
+      });
+      dom.btnCloseRep.addEventListener('click', () => {
+        dom.repModal.classList.add('hidden');
+      });
+
+      // Drawing style buttons
+      document.querySelectorAll('.rep-style-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.rep-style-btn').forEach(b => {
+            b.classList.remove('border-cyan-500/40', 'bg-cyan-500/15', 'text-cyan-300');
+            b.classList.add('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
+          });
+          btn.classList.add('border-cyan-500/40', 'bg-cyan-500/15', 'text-cyan-300');
+          btn.classList.remove('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
+
+          appState.repStyle = btn.dataset.rep;
+          applyVmdRepresentation();
+        });
+      });
+
+      // Color select
+      dom.colorSelect.addEventListener('change', (e) => {
+        appState.colorScheme = e.target.value;
+        applyVmdRepresentation();
+      });
+
+      // Preset buttons inside rep modal
+      dom.btnLoadCrambin.addEventListener('click', () => {
+        loadCrambinDemo();
+        dom.repModal.classList.add('hidden');
+      });
+      dom.btnLoadHelix.addEventListener('click', () => {
+        loadHelixDemo();
+        dom.repModal.classList.add('hidden');
+      });
+
+      // Trajectory upload modal handlers
+      dom.btnOpenFile.addEventListener('click', () => {
+        dom.uploadModal.classList.remove('hidden');
+      });
+      dom.btnCloseUpload.addEventListener('click', () => {
+        dom.uploadModal.classList.add('hidden');
+      });
+
+      // Handle Multi-model PDB upload
+      dom.btnChooseMulti.addEventListener('click', () => {
+        dom.fileInputPdb.click();
+      });
+
+      dom.fileInputPdb.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        dom.uploadModal.classList.add('hidden');
+        stopPlayback();
+        appState.stage.removeAllComponents();
+
+        dom.modelName.textContent = file.name;
+        dom.atomCount.textContent = 'Loading...';
+
+        try {
+          const comp = await appState.stage.loadFile(file, { defaultRepresentation: false });
+          appState.component = comp;
+          applyVmdRepresentation();
+          comp.autoView();
+
+          const modelCount = comp.structure.modelStore.count || 1;
+          dom.atomCount.textContent = comp.structure.atomCount;
+
+          if (modelCount > 1) {
+            const trajComp = comp.addTrajectory();
+            appState.trajComp = trajComp;
+            setupTrajectoryUI(modelCount);
+            startPlayback();
+          } else {
+            setupTrajectoryUI(1);
+            dom.frameCounter.textContent = 'Single Frame';
+            dom.simTime.textContent = '0.00 ns';
+          }
+        } catch (err) {
+          console.error('File load failed:', err);
+        }
+      });
+
+      // Handle PDB + separate trajectory pair
+      let loadedPdbFile = null;
+      dom.btnChoosePair.addEventListener('click', () => {
+        // Trigger PDB selection first
+        dom.fileInputPdb.click();
+      });
+
+      // Info modal
+      dom.btnInfo.addEventListener('click', () => {
+        dom.infoModal.classList.remove('hidden');
+      });
+      dom.btnCloseInfo.addEventListener('click', () => {
+        dom.infoModal.classList.add('hidden');
+      });
+
+      // Keyboard shortcuts (VMD style)
+      window.addEventListener('keydown', (e) => {
+        // Ignore if user is inside an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+        if (e.code === 'Space') {
+          e.preventDefault();
+          togglePlay();
+        } else if (e.code === 'ArrowRight') {
+          stopPlayback();
+          stepFrame(1);
+        } else if (e.code === 'ArrowLeft') {
+          stopPlayback();
+          stepFrame(-1);
+        } else if (e.key === 'r' || e.key === 'R') {
+          if (appState.component) appState.component.autoView(400);
+        } else if (e.code === 'Home') {
+          stopPlayback();
+          setFrame(0);
+        } else if (e.code === 'End') {
+          stopPlayback();
+          setFrame(appState.totalFrames - 1);
+        }
+      });
+    }
+
+    window.addEventListener('load', () => {
+      initNglViewer();
+      bindEventListeners();
+      // Periodically redraw coordinate axes to keep in sync with touch rotations
+      setInterval(drawVmdAxes, 60);
+    });
+  </script>
+</body>
+</html>
