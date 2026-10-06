@@ -161,9 +161,9 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
           <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基竿 (Ladder)</option>
+            <option value="vmd_ladder" selected>VMD NewCartoon + 鹼基棒 (Ladder)</option>
             <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
-            <option value="licorice">Licorice 棒狀模型</option>
+            <option value="licorice">Licorice 全棒狀模型</option>
           </select>
         </div>
         <div>
@@ -254,9 +254,12 @@
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
+      dnaBaseSelections: '',
       contactProtSele: '',
       contactDnaSele: '',
-      focusViewSele: ''
+      focusViewSele: '',
+      hasZinc: false,
+      zincSele: ''
     };
 
     lucide.createIcons();
@@ -306,9 +309,6 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    /**
-     * 動態掃描環境：若是 GitHub Pages 則動態讀取目錄，否則提示載入
-     */
     async function scanEnvironmentFiles() {
       const hostname = window.location.hostname;
       const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
@@ -344,7 +344,6 @@
         }
       }
 
-      // 一般本地或自託管環境，預設提示使用者選檔
       dom.fileSelector.innerHTML = '<option value="" disabled selected>點擊右側資料夾選取 .pdb</option>';
       hideLoading();
     }
@@ -355,13 +354,21 @@
     }
 
     /**
-     * 【通用動態算法】偵測 DNA 股數與邊界，適用於任何長度
+     * 【通用動態算法】偵測 DNA 各股與鋅離子，徹底隔絕白球與相連錯誤
      */
     function autoDetectDnaStrands(structure) {
       const nucleicResidues = [];
-      
+      const zincResnos = [];
+
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
+        // 判定鋅離子
+        if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
+          zincResnos.push(r.resno);
+          return;
+        }
+
+        // 匹配核酸 (DA, DT, DC, DG, Amber DG5, DA3, etc.)
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
           nucleicResidues.push({
@@ -372,23 +379,38 @@
         }
       });
 
+      // 設定鋅離子狀態
+      if (zincResnos.length > 0) {
+        appState.hasZinc = true;
+        appState.zincSele = `(${zincResnos.map(res => `@${res}`).join(' or ')}) or (resname ZN or resname ZN2)`;
+      } else {
+        appState.hasZinc = false;
+        appState.zincSele = 'none';
+      }
+
       if (nucleicResidues.length === 0) {
-        appState.dnaStrandSelections = ['nucleic'];
+        appState.dnaStrandSelections = [];
+        appState.dnaBaseSelections = 'none';
         return;
       }
 
+      // 如果有原生多鏈 (如 :B, :C)
       const chainSet = new Set(nucleicResidues.map(n => n.chain));
       if (chainSet.size >= 2) {
-        appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and nucleic`);
+        appState.dnaStrandSelections = Array.from(chainSet).map(c => `:${c} and nucleic and not hydrogen`);
+        appState.dnaBaseSelections = `nucleic and not backbone and not hydrogen`;
         return;
       }
 
+      // 若在同一鏈，動態切割為獨立股 (永不閉環)
       const strands = [];
       let currentStrand = [];
+      const allDnaResnos = [];
 
       for (let i = 0; i < nucleicResidues.length; i++) {
         const curr = nucleicResidues[i];
         currentStrand.push(curr.resno);
+        allDnaResnos.push(curr.resno);
 
         let isEnd = false;
         if (curr.resname.endsWith('3')) {
@@ -403,7 +425,7 @@
         if (isEnd || i === nucleicResidues.length - 1) {
           const minRes = Math.min(...currentStrand);
           const maxRes = Math.max(...currentStrand);
-          strands.push(`(${minRes}-${maxRes} and not protein and not resname ZN)`);
+          strands.push(`(${minRes}-${maxRes} and not protein and not resname ZN and not hydrogen)`);
           currentStrand = [];
         }
       }
@@ -415,25 +437,32 @@
         const s2_min = nucleicResidues[half].resno;
         const s2_max = nucleicResidues[nucleicResidues.length - 1].resno;
         appState.dnaStrandSelections = [
-          `(${s1_min}-${s1_max} and not protein and not resname ZN)`,
-          `(${s2_min}-${s2_max} and not protein and not resname ZN)`
+          `(${s1_min}-${s1_max} and not protein and not resname ZN and not hydrogen)`,
+          `(${s2_min}-${s2_max} and not protein and not resname ZN and not hydrogen)`
         ];
       } else {
         appState.dnaStrandSelections = strands;
       }
+
+      const minAll = Math.min(...allDnaResnos);
+      const maxAll = Math.max(...allDnaResnos);
+      appState.dnaBaseSelections = `(${minAll}-${maxAll} and not backbone and not hydrogen and not resname ZN)`;
     }
 
     /**
-     * 【通用動態算法】精準空間運算：蛋白質側鏈 vs DNA 鹼基之接觸原子
+     * 【通用動態算法】空間距離計算：真正抓取接觸側鏈與接觸鹼基
      */
     function autoCalculateInterface(structure) {
       const protAtoms = [];
       const dnaAtoms = [];
 
       structure.eachAtom(a => {
+        // 徹底排除氫原子與鋅
+        if (a.element === 'H' || a.resname === 'ZN') return;
+
         const rname = (a.resname || '').trim().toUpperCase();
         const isDna = a.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
-        const isProt = a.isProtein() && !isDna && rname !== 'ZN';
+        const isProt = a.isProtein() && !isDna;
 
         if (isProt) {
           protAtoms.push({
@@ -494,7 +523,7 @@
     }
 
     /**
-     * 重建所有 Representation
+     * 重建所有 Representation (徹底清除任何白球與假相連)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -506,10 +535,10 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體
+      // 1. 蛋白質主體 (嚴格排除氫原子和鋅)
       if (pRep === 'newcartoon') {
         appState.component.addRepresentation('cartoon', {
-          sele: 'protein and not resname ZN',
+          sele: 'protein and not resname ZN and not hydrogen',
           ...pColorParams,
           aspectRatio: 3.8,
           scale: 0.9,
@@ -518,24 +547,22 @@
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
-          sele: 'protein and not resname ZN',
+          sele: 'protein and not resname ZN and not hydrogen',
           ...pColorParams,
           radius: 0.32,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
-          sele: 'protein and not resname ZN',
+          sele: 'protein and not resname ZN and not hydrogen',
           ...pColorParams,
           radius: 0.2,
           multipleBond: 'off'
         });
       }
 
-      // 2. DNA 雙螺旋骨架 (分股獨立繪製，永不閉環)
-      const strands = appState.dnaStrandSelections.length > 0 ? appState.dnaStrandSelections : ['not protein and not resname ZN'];
-
-      strands.forEach(strandSele => {
+      // 2. DNA 骨架絲帶 (分股獨立繪製，永不相連閉環)
+      appState.dnaStrandSelections.forEach(strandSele => {
         if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
           appState.component.addRepresentation('cartoon', {
             sele: strandSele,
@@ -548,29 +575,35 @@
         }
       });
 
-      // 鹼基竿子 (Ladder Blocks)
+      // 3. DNA 鹼基顯示：改用精緻的 Licorice 鹼基桿 (徹底代替會爆出巨大白球的 base 表示法)
       if (dRep === 'vmd_ladder') {
-        appState.component.addRepresentation('base', {
-          sele: 'not protein and not resname ZN',
-          ...dColorParams
-        });
+        if (appState.dnaBaseSelections && appState.dnaBaseSelections !== 'none') {
+          appState.component.addRepresentation('licorice', {
+            sele: appState.dnaBaseSelections,
+            ...dColorParams,
+            radius: 0.18,
+            multipleBond: 'off'
+          });
+        }
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not resname ZN',
+          sele: 'not protein and not resname ZN and not hydrogen',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
-      // 3. 鋅離子 (ZN)：只針對 resname ZN，不亂長金屬球
-      appState.component.addRepresentation('spacefill', {
-        sele: 'resname ZN or resname ZN2 or resname ZINC',
-        color: '#94a3b8',
-        scale: 0.65
-      });
+      // 4. 鋅離子 (ZN)：只畫單一金屬球，若不存在則完全不畫
+      if (appState.hasZinc) {
+        appState.component.addRepresentation('spacefill', {
+          sele: 'resname ZN or resname ZN2 or (element Zn and not hydrogen)',
+          color: '#94a3b8',
+          scale: 0.65
+        });
+      }
 
-      // 4. 鹼基文字標籤
+      // 5. 鹼基文字標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
           sele: 'not protein and not resname ZN and (.C1\' or .C1*)',
@@ -581,8 +614,9 @@
         });
       }
 
-      // 5. 結合區特寫模式：只繪製接觸側鏈與鹼基
+      // 6. 結合區特寫模式：只繪製計算出的接觸側鏈與接觸鹼基
       if (appState.isFocusingInterface) {
+        // (A) 接觸蛋白質側鏈
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
@@ -592,6 +626,7 @@
           });
         }
 
+        // (B) 接觸 DNA 鹼基
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
@@ -600,14 +635,6 @@
             multipleBond: 'off'
           });
         }
-
-        appState.component.addRepresentation('contact', {
-          sele: 'protein and not resname ZN',
-          filterSele: 'not protein and not resname ZN',
-          contactType: 'polar',
-          maxDistance: 3.5,
-          color: '#38bdf8'
-        });
       }
     }
 
@@ -621,7 +648,7 @@
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
-        const viewTarget = appState.focusViewSele || 'not protein and not resname ZN';
+        const viewTarget = appState.focusViewSele || 'not protein and not resname ZN and not hydrogen';
         appState.component.autoView(viewTarget, 800);
         dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
         dom.focusBtnText.textContent = '重設視角';
@@ -756,7 +783,7 @@
           dom.fileSelector.appendChild(newOpt);
         }
 
-        // 動態判定 DNA 與 Pocket
+        // 動態偵測 DNA 與 Pocket
         autoDetectDnaStrands(comp.structure);
         autoCalculateInterface(comp.structure);
 
@@ -804,12 +831,10 @@
     }
 
     function initEvents() {
-      // 檔案選擇下拉
       dom.fileSelector.addEventListener('change', (e) => {
         loadPdbFile(e.target.value);
       });
 
-      // 開啟本地檔案
       dom.btnBrowseFile.addEventListener('click', () => {
         dom.localFileInput.click();
       });
@@ -821,7 +846,6 @@
         }
       });
 
-      // 拖曳檔案進視窗支援
       window.addEventListener('dragover', (e) => {
         e.preventDefault();
         dom.dropOverlay.classList.remove('hidden');
