@@ -1,28 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>VMD Web Trajectory Player</title>
+  <title>VMD 網頁分子動態播放器</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
+  <!-- Lucide 圖示庫 -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- NGL Viewer library for WebGL molecular rendering -->
+  <!-- NGL Viewer WebGL 渲染引擎 -->
   <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.0-dev.37/dist/ngl.js"></script>
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
 
     :root {
       --vmd-bg: #0b0f19;
-      --vmd-panel: rgba(18, 24, 38, 0.90);
-      --vmd-border: rgba(56, 189, 248, 0.25);
+      --vmd-panel: rgba(18, 24, 38, 0.92);
+      --vmd-border: rgba(56, 189, 248, 0.28);
       --vmd-cyan: #38bdf8;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
       background-color: var(--vmd-bg);
       color: #e2e8f0;
       user-select: none;
@@ -47,9 +47,8 @@
       accent-color: #38bdf8;
     }
 
-    /* Trajectory progress scrubber thumb glow */
     input[type=range]::-webkit-slider-thumb {
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
     }
 
     ::-webkit-scrollbar {
@@ -57,7 +56,7 @@
       height: 4px;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.4);
       border-radius: 4px;
     }
 
@@ -66,180 +65,179 @@
     }
   </style>
 </head>
-<body class="w-screen h-screen relative">
+<body class="w-screen h-screen relative bg-[#0b0f19]">
 
-
+  <!-- 3D 渲染視窗 -->
   <div id="viewport" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
 
-  <!-- Loading / Status Banner -->
-  <div id="loading-overlay" class="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none transition-opacity duration-300">
+  <!-- 讀取狀態遮罩 -->
+  <div id="loading-overlay" class="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center transition-opacity duration-300 pointer-events-none">
     <div class="vmd-panel rounded-2xl p-6 flex flex-col items-center space-y-3 pointer-events-auto border border-cyan-500/40 shadow-2xl">
       <div class="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div>
-      <div class="font-mono-vmd text-sm text-cyan-300 font-bold tracking-wider" id="loading-text">Scanning Repository PDB Files...</div>
-      <div class="text-[11px] text-slate-400" id="loading-subtext">Fetching directory listing</div>
+      <div class="font-mono-vmd text-sm text-cyan-300 font-bold tracking-wider" id="loading-text">掃描資料夾 PDB 結構中...</div>
+      <div class="text-[12px] text-slate-400" id="loading-subtext">請稍候</div>
     </div>
   </div>
 
-
+  <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-    <!-- Left: Brand & PDB Switcher Dropdown -->
+    <!-- 左側：標題與結構選單 -->
     <div class="vmd-panel rounded-xl px-3 py-2 flex items-center space-x-2.5 pointer-events-auto shadow-lg max-w-full">
       <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2.5">
         <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
         <span class="font-mono-vmd font-bold text-xs sm:text-sm tracking-wider text-cyan-400">VMD-WEB</span>
       </div>
 
-      <!-- File Switcher Dropdown -->
+      <!-- 檔案切換下拉選單 (只列出真實檔案) -->
       <div class="flex items-center space-x-1.5">
-        <i data-lucide="file-code" class="w-3.5 h-3.5 text-cyan-400"></i>
-        <select id="file-selector" class="bg-slate-900 border border-cyan-500/30 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 max-w-[160px] sm:max-w-[260px] truncate cursor-pointer hover:bg-slate-800 transition">
-          <option value="" disabled selected>Detecting PDBs...</option>
+        <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400"></i>
+        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[170px] sm:max-w-[280px] truncate cursor-pointer hover:bg-slate-800 transition">
+          <option value="" disabled selected>偵測 PDB 檔案中...</option>
         </select>
-        <button id="btn-refresh-files" title="Rescan folder / repository" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
+        <button id="btn-refresh-files" title="重新掃描資料夾" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
         </button>
       </div>
     </div>
 
-    <!-- Right: VMD HUD Stats & Action Buttons -->
+    <!-- 右側：HUD 數據面板與功能按鍵 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
       
-      <!-- Stats HUD Panel (Collapsible on mobile) -->
-      <div id="stats-hud" class="vmd-panel hidden md:flex items-center space-x-3 px-3 py-2 rounded-xl font-mono-vmd text-xs text-slate-300">
-        <div><span class="text-slate-500">ATOMS:</span> <span id="atom-count" class="text-slate-200">--</span></div>
-        <div><span class="text-slate-500">FRAME:</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
-        <div class="hidden lg:block"><span class="text-slate-500">TIME:</span> <span id="sim-time" class="text-slate-200">0.00 ns</span></div>
+      <!-- 統計數據 -->
+      <div class="vmd-panel hidden md:flex items-center space-x-3.5 px-3 py-2 rounded-xl font-mono-vmd text-xs text-slate-300">
+        <div><span class="text-slate-500">原子數:</span> <span id="atom-count" class="text-slate-200">--</span></div>
+        <div><span class="text-slate-500">影格 (Frame):</span> <span id="frame-counter" class="text-cyan-300 font-bold">0 / 0</span></div>
       </div>
 
-      <!-- Graphics Rep Menu Button -->
-      <button id="btn-toggle-rep" title="Representations & Colors" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
-        <i data-lucide="layers" class="w-4 h-4"></i>
-        <span class="hidden sm:inline">Graphics</span>
+      <!-- 渲染樣式選單 -->
+      <button id="btn-toggle-rep" title="幾何樣式與配色" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
+        <i data-lucide="palette" class="w-4 h-4"></i>
+        <span class="hidden sm:inline">樣式設定</span>
       </button>
 
-      <!-- Upload Local Fallback -->
-      <button id="btn-open-file" title="Upload local PDB/XTC" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
+      <!-- 本機上傳備用按鈕 -->
+      <button id="btn-open-file" title="上傳電腦或手機本地 PDB" class="vmd-panel hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition">
         <i data-lucide="upload" class="w-4 h-4"></i>
-        <span class="hidden sm:inline">Upload</span>
+        <span class="hidden sm:inline">上傳</span>
       </button>
 
-      <!-- Reset Camera -->
-      <button id="btn-reset-view" title="Reset Camera View (r)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
+      <!-- 重設視角 (r) -->
+      <button id="btn-reset-view" title="重設鏡頭視角置中 (鍵盤 R)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="focus" class="w-4 h-4"></i>
       </button>
       
-      <!-- Info / Help -->
-      <button id="btn-info" title="VMD Guide & Controls" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
+      <!-- 說明對話框 -->
+      <button id="btn-info" title="手勢與操作說明" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
         <i data-lucide="help-circle" class="w-4 h-4"></i>
       </button>
     </div>
   </header>
 
-
-  <!-- VMD Coordinate Axes in bottom-left corner -->
+  <!-- 左下角 VMD 座標三軸 (RGB: 紅 X, 綠 Y, 藍 Z) -->
   <div class="absolute bottom-28 left-4 z-10 flex flex-col items-center pointer-events-none select-none">
-    <canvas id="axes-canvas" width="84" height="84" class="drop-shadow-lg"></canvas>
-    <span class="font-mono-vmd text-[10px] text-slate-400 font-bold tracking-widest mt-[-8px]">VMD AXES</span>
+    <canvas id="axes-canvas" width="86" height="86" class="drop-shadow-lg"></canvas>
+    <span class="font-mono-vmd text-[10px] text-slate-400 font-bold tracking-widest mt-[-8px]">VMD 座標軸</span>
   </div>
 
-  <!-- Graphical Representations Modal -->
+  <!-- 幾何顯示與配色面板 -->
   <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-80 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
     <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
       <div class="flex items-center space-x-2">
-        <i data-lucide="palette" class="w-4 h-4 text-cyan-400"></i>
-        <h3 class="text-sm font-semibold text-slate-100">Graphical Representations</h3>
+        <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
+        <h3 class="text-sm font-semibold text-slate-100">分子繪製樣式 (Representations)</h3>
       </div>
       <button id="btn-close-rep" class="text-slate-400 hover:text-white">
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
     </div>
 
-    <!-- Drawing Method -->
+    <!-- 繪製樣式 -->
     <div class="mb-4">
-      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase">Drawing Method</label>
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">Drawing Method (繪圖模式)</label>
       <div class="grid grid-cols-2 gap-1.5">
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="surface">QuickSurf</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="spacefill">VDW (Spheres)</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="ribbon">Ribbon</button>
-        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="trace">Trace</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-cyan-500/40 bg-cyan-500/15 text-cyan-300" data-rep="cartoon">NewCartoon 卡通</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="licorice">Licorice 管狀</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="surface">QuickSurf 表面</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="spacefill">VDW 凡德瓦球體</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="ribbon">Ribbon 絲帶</button>
+        <button class="rep-style-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-left border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600" data-rep="trace">Trace 軌跡線</button>
       </div>
     </div>
 
-    <!-- Coloring Method -->
+    <!-- 配色方案 -->
     <div class="mb-3">
-      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase">Coloring Method</label>
+      <label class="block text-xs font-mono-vmd text-slate-400 mb-1.5 uppercase tracking-wide">Coloring Method (著色規則)</label>
       <select id="color-select" class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500">
-        <option value="sstruc" selected>ResType / Secondary Structure (VMD)</option>
-        <option value="chainid">Chain ID</option>
-        <option value="resname">Residue Name / Type</option>
-        <option value="element">Element (CPK)</option>
-        <option value="residueindex">Residue Index Rainbow</option>
-        <option value="hydrophobicity">Hydrophobicity</option>
+        <option value="sstruc" selected>ResType / 二級結構 (Secondary Structure)</option>
+        <option value="chainid">Chain ID 鏈編號</option>
+        <option value="resname">Residue Name 殘基類型</option>
+        <option value="element">Element (CPK 原子顏色)</option>
+        <option value="residueindex">Residue Index 漸層彩虹</option>
+        <option value="hydrophobicity">Hydrophobicity 疏水性</option>
       </select>
     </div>
   </div>
 
   <input type="file" id="file-input-local" accept=".pdb,.ent,.cif" class="hidden" />
 
-
+  <!-- 底部 VMD Animate 播放控制器 -->
   <footer class="absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex flex-col items-center">
     <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
       
-      <!-- Frame Scrubber -->
+      <!-- 軌跡時間軸拉桿 -->
       <div class="flex items-center space-x-3 w-full">
-        <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-8 text-right" id="slider-curr-frame">0</span>
+        <span class="font-mono-vmd text-xs text-cyan-300 font-semibold w-8 text-right" id="slider-curr-frame">0</span>
         <input id="trajectory-slider" type="range" min="0" max="0" value="0" step="1" 
-               class="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:outline-none" />
+               class="flex-1 h-1.5 bg-slate-750 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:outline-none" />
         <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-8 text-left" id="slider-total-frame">0</span>
       </div>
 
-      <!-- Playback Controls -->
-      <div class="flex items-center justify-between w-full pt-1">
+      <!-- 播放控制按鈕區 -->
+      <div class="flex items-center justify-between w-full pt-0.5">
         
-        <!-- Loop Mode -->
-        <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1" title="Playback Loop Mode">
+        <!-- 循環模式切換 (LOOP / ROCK / ONCE) -->
+        <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1" title="循環模式">
           <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
-          <span id="loop-label">LOOP</span>
+          <span id="loop-label">循環 (LOOP)</span>
         </button>
 
-        <!-- Transport Buttons -->
-        <div class="flex items-center space-x-1.5 sm:space-x-2">
-          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="First Frame (Home)">
+        <!-- 步進 / 播放按鈕 -->
+        <div class="flex items-center space-x-1 sm:space-x-2">
+          <!-- 跳至首影格 -->
+          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="第一影格 (Home)">
             <i data-lucide="skip-back" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Step Reverse (Left Arrow)">
+          <!-- 倒退 1 幀 -->
+          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="倒退一格 (方向鍵左)">
             <i data-lucide="step-back" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-play-rev" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Play Reverse">
-            <i data-lucide="play" class="w-4 h-4 transform rotate-180"></i>
-          </button>
-
-          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95" title="Play / Pause (Spacebar)">
+          <!-- 核心：播放 / 暫停按鈕 -->
+          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1" title="播放 / 暫停 (空白鍵)">
             <i id="play-icon" data-lucide="play" class="w-5 h-5 fill-current"></i>
           </button>
 
-          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Step Forward (Right Arrow)">
+          <!-- 前進 1 幀 -->
+          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="前進一格 (方向鍵右)">
             <i data-lucide="step-forward" class="w-4 h-4"></i>
           </button>
 
-          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Last Frame (End)">
+          <!-- 跳至末影格 -->
+          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="最後影格 (End)">
             <i data-lucide="skip-forward" class="w-4 h-4"></i>
           </button>
         </div>
 
-        <!-- FPS Speed Selector -->
+        <!-- 播放幀率設定 -->
         <div class="flex items-center space-x-1.5">
           <i data-lucide="gauge" class="w-3.5 h-3.5 text-slate-400 hidden sm:inline"></i>
           <select id="fps-select" class="bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none">
-            <option value="10">10 FPS</option>
-            <option value="20" selected>20 FPS</option>
-            <option value="30">30 FPS</option>
-            <option value="60">60 FPS</option>
+            <option value="10">10 幀/秒</option>
+            <option value="20" selected>20 幀/秒</option>
+            <option value="30">30 幀/秒</option>
+            <option value="50">50 幀/秒</option>
           </select>
         </div>
 
@@ -247,56 +245,55 @@
     </div>
   </footer>
 
-
+  <!-- 繁體中文說明對話框 -->
   <div id="info-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="vmd-panel max-w-md w-full rounded-2xl p-5 shadow-2xl border border-slate-700">
       <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
         <h3 class="text-sm font-bold text-cyan-400 flex items-center space-x-2">
           <i data-lucide="info" class="w-4 h-4"></i>
-          <span>VMD Web Viewer Controls</span>
+          <span>操作手勢與快捷鍵指南</span>
         </h3>
         <button id="btn-close-info" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
 
       <div class="space-y-3 text-xs text-slate-300 leading-relaxed">
         <div>
-          <h4 class="font-bold text-white mb-1">Mobile Touch Gestures</h4>
+          <h4 class="font-bold text-white mb-1">手機與平板觸控</h4>
           <ul class="list-disc pl-5 space-y-1 text-slate-300">
-            <li><strong>1 Finger Drag:</strong> Rotate model in 3D</li>
-            <li><strong>2 Finger Pinch:</strong> Zoom in / out</li>
-            <li><strong>2 Finger Drag:</strong> Pan structure</li>
+            <li><strong>單指滑動：</strong>3D 任意旋轉模型</li>
+            <li><strong>雙指捏合：</strong>放大 / 縮小 (Zoom)</li>
+            <li><strong>雙指同向拖曳：</strong>平移視角 (Pan)</li>
           </ul>
         </div>
 
         <div>
-          <h4 class="font-bold text-white mb-1">Desktop Shortcuts</h4>
+          <h4 class="font-bold text-white mb-1">電腦鍵盤快捷鍵</h4>
           <ul class="list-disc pl-5 space-y-1 text-slate-300">
-            <li><strong>Spacebar:</strong> Play / Pause trajectory</li>
-            <li><strong>Left / Right Arrow:</strong> Step 1 frame back / forward</li>
-            <li><strong>R key:</strong> Reset camera view and center</li>
+            <li><strong>空白鍵 (Space)：</strong>播放 / 暫停軌跡</li>
+            <li><strong>左右方向鍵 (← / →)：</strong>步進 1 個影格</li>
+            <li><strong>R 鍵：</strong>重設視角置中</li>
           </ul>
         </div>
 
-        <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] text-cyan-300">
-          <strong>Tip for your files:</strong> Place any Multi-model PDB in this GitHub repository. The top dropdown will scan and list them automatically so visitors can switch between them on their phone!
+        <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-[11px] text-cyan-300">
+          <strong>提示：</strong>只需將抽樣後的輕量多模型 PDB 放在 GitHub 倉庫中，網頁就會自動掃描並載入播放！
         </div>
       </div>
     </div>
   </div>
 
-
   <script>
     /**
-     * CONFIGURATION: Default fallback list of PDB files to look for in the folder
-     * You can add or rename files in this array if GitHub API rate-limits or if testing locally.
+     * 本地或離線時優先探測的檔案清單
+     * 若在 GitHub Pages 上，程式會自動使用 GitHub API 找出所有真正的 .pdb 檔案
      */
-    const KNOWN_PDB_CANDIDATES = [
+    const PROBE_LIST = [
       'traj_light.pdb',
       'trajectory.pdb',
       'model.pdb',
       'complex.pdb',
-      'snapshot_0ns.pdb',
-      'snapshot_100ns.pdb'
+      'snapshot.pdb',
+      'output.pdb'
     ];
 
     const appState = {
@@ -306,14 +303,13 @@
       totalFrames: 1,
       currentFrame: 0,
       isPlaying: false,
-      playbackDirection: 1,
-      loopMode: 'loop', // 'once', 'loop', 'rock'
+      loopMode: 'loop', // 'loop', 'rock', 'once'
+      direction: 1,
       fps: 20,
       timerId: null,
       repStyle: 'cartoon',
       colorScheme: 'sstruc',
-      representations: [],
-      availablePdbFiles: []
+      availableFiles: []
     };
 
     lucide.createIcons();
@@ -325,14 +321,12 @@
       loadingSubtext: document.getElementById('loading-subtext'),
       fileSelector: document.getElementById('file-selector'),
       btnRefreshFiles: document.getElementById('btn-refresh-files'),
-      frameCounter: document.getElementById('frame-counter'),
-      simTime: document.getElementById('sim-time'),
       atomCount: document.getElementById('atom-count'),
+      frameCounter: document.getElementById('frame-counter'),
       slider: document.getElementById('trajectory-slider'),
       sliderCurr: document.getElementById('slider-curr-frame'),
       sliderTotal: document.getElementById('slider-total-frame'),
       btnPlay: document.getElementById('btn-play'),
-      btnPlayRev: document.getElementById('btn-play-rev'),
       btnPrevFrame: document.getElementById('btn-prev-frame'),
       btnNextFrame: document.getElementById('btn-next-frame'),
       btnFirstFrame: document.getElementById('btn-first-frame'),
@@ -353,9 +347,9 @@
       axesCanvas: document.getElementById('axes-canvas')
     };
 
-    function showLoading(text, subtext = '') {
-      dom.loadingText.textContent = text;
-      dom.loadingSubtext.textContent = subtext;
+    function showLoading(title, sub = '') {
+      dom.loadingText.textContent = title;
+      dom.loadingSubtext.textContent = sub;
       dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
     }
 
@@ -363,258 +357,130 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-
     /**
-     * Inspects GitHub repository contents via GitHub API or tests fallback candidates
+     * 掃描資料夾或 GitHub Pages Repo 根目錄下的所有真實 PDB 檔案
      */
-    async function scanDirectoryForPdbs() {
-      showLoading('Scanning Repository...', 'Looking for PDB files');
-      let detectedFiles = [];
+    async function scanPdbFiles() {
+      showLoading('掃描目錄中...', '尋找 PDB 檔案');
+      let found = [];
 
-      // Check if running on GitHub Pages (e.g., https://username.github.io/reponame/)
       const hostname = window.location.hostname;
-      const pathname = window.location.pathname.replace(/^\/|\/$/g, ''); // strip leading/trailing slashes
+      const pathname = window.location.pathname.replace(/^\/|\/$/g, '');
       const isGitHubPages = hostname.endsWith('github.io');
 
+      // 1. 若在 GitHub Pages，透過 GitHub API 自動抓取 Repo 根目錄所有檔案清單
       if (isGitHubPages && pathname) {
         const owner = hostname.split('.')[0];
-        const pathParts = pathname.split('/');
-        const repo = pathParts[0]; // first segment is repo name
-        
+        const repo = pathname.split('/')[0];
         try {
-          const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
-          const res = await fetch(apiUrl);
+          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`);
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data)) {
-              detectedFiles = data
+              found = data
                 .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
-                .map(item => ({ name: item.name, url: item.name, source: 'repo' }));
+                .map(item => ({ name: item.name, url: item.name }));
             }
           }
         } catch (e) {
-          console.warn('GitHub API request bypassed or rate-limited:', e);
+          console.warn('GitHub API 未回應，改用候選清單探測:', e);
         }
       }
 
-      // If GitHub API didn't return files (or running locally), probe candidate files with HTTP HEAD
-      if (detectedFiles.length === 0) {
-        const testPromises = KNOWN_PDB_CANDIDATES.map(async (filename) => {
+      // 2. 若不在 GitHub Pages（本地測試）或 API 失敗，使用常用檔名逐一探測
+      if (found.length === 0) {
+        const checks = PROBE_LIST.map(async (filename) => {
           try {
-            const res = await fetch(filename, { method: 'HEAD' });
-            if (res.ok) return { name: filename, url: filename, source: 'folder' };
-          } catch (e) {
-            // file not present
-          }
+            const r = await fetch(filename, { method: 'HEAD' });
+            if (r.ok) return { name: filename, url: filename };
+          } catch (e) {}
           return null;
         });
-
-        const results = await Promise.all(testPromises);
-        detectedFiles = results.filter(Boolean);
+        const resList = await Promise.all(checks);
+        found = resList.filter(Boolean);
       }
 
-      // Provide built-in demo structures if folder has no PDBs yet
-      detectedFiles.push({ name: '1CRN (Crambin Demo)', url: 'rcsb://1CRN', source: 'demo' });
-      detectedFiles.push({ name: 'Simulated Dynamic Helix', url: 'builtin://helix', source: 'synthetic' });
-
-      appState.availablePdbFiles = detectedFiles;
-      populatePdbDropdown(detectedFiles);
+      appState.availableFiles = found;
+      populateDropdown(found);
       hideLoading();
 
-      // Automatically load the first discovered real PDB, or the demo
-      if (detectedFiles.length > 0) {
-        const initialSelection = detectedFiles[0].url;
-        dom.fileSelector.value = initialSelection;
-        loadSelectedPdb(initialSelection);
+      if (found.length > 0) {
+        dom.fileSelector.value = found[0].url;
+        loadPdbFile(found[0].url);
+      } else {
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 .pdb 檔案 (請點右上上傳)</option>';
       }
     }
 
-    function populatePdbDropdown(files) {
+    function populateDropdown(files) {
       dom.fileSelector.innerHTML = '';
-      
-      const realGroup = document.createElement('optgroup');
-      realGroup.label = 'Folder / Repository PDBs';
+      if (files.length === 0) return;
 
-      const demoGroup = document.createElement('optgroup');
-      demoGroup.label = 'Built-in Demo Presets';
-
-      let hasReal = false;
       files.forEach(f => {
         const opt = document.createElement('option');
         opt.value = f.url;
         opt.textContent = f.name;
-
-        if (f.source === 'repo' || f.source === 'folder') {
-          realGroup.appendChild(opt);
-          hasReal = true;
-        } else {
-          demoGroup.appendChild(opt);
-        }
+        dom.fileSelector.appendChild(opt);
       });
-
-      if (hasReal) dom.fileSelector.appendChild(realGroup);
-      dom.fileSelector.appendChild(demoGroup);
     }
 
-
-    async function loadSelectedPdb(urlOrPath) {
-      stopPlayback();
-      showLoading('Loading Structure...', urlOrPath);
-
-      try {
-        appState.stage.removeAllComponents();
-
-        let comp;
-        if (urlOrPath === 'builtin://helix') {
-          const pdbData = generateSyntheticHelixPdb(30);
-          const blob = new Blob([pdbData], { type: 'text/plain' });
-          comp = await appState.stage.loadFile(blob, { ext: 'pdb', defaultRepresentation: false });
-        } else {
-          comp = await appState.stage.loadFile(urlOrPath, { defaultRepresentation: false });
-        }
-
-        appState.component = comp;
-        applyVmdRepresentation();
-        comp.autoView(600);
-
-        // Update stats
-        const atomCount = comp.structure.atomCount || 0;
-        dom.atomCount.textContent = atomCount.toLocaleString();
-
-        // Check if multi-model trajectory
-        const modelCount = comp.structure.modelStore.count || 1;
-        if (modelCount > 1) {
-          const trajComp = comp.addTrajectory();
-          appState.trajComp = trajComp;
-          setupTrajectoryUI(modelCount);
-          startPlayback();
-        } else {
-          setupTrajectoryUI(1);
-          dom.frameCounter.textContent = '1 / 1 (Single)';
-          dom.simTime.textContent = '0.00 ns';
-        }
-
-        hideLoading();
-      } catch (err) {
-        console.error('Failed to load PDB:', err);
-        hideLoading();
-        dom.loadingText.textContent = 'Could not load ' + urlOrPath;
-        dom.loadingSubtext.textContent = 'Verify that the file is uploaded to GitHub and case-sensitive';
-        dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
-        setTimeout(hideLoading, 3500);
-      }
-    }
-
-    function generateSyntheticHelixPdb(numModels = 30) {
-      const residues = ['MET', 'LYS', 'VAL', 'GLU', 'LEU', 'ALA', 'GLN', 'ARG', 'HIS', 'TRP'];
-      const lines = [];
-
-      for (let m = 0; m < numModels; m++) {
-        lines.push(`MODEL     ${String(m + 1).padStart(4, ' ')}`);
-        let atomIdx = 1;
-        const phase = (m / numModels) * Math.PI * 2;
-
-        for (let i = 0; i < residues.length; i++) {
-          const res = residues[i];
-          const zBase = i * 1.5;
-          const theta = i * 1.745;
-          const bendX = Math.sin(phase + i * 0.45) * 1.3;
-          const bendY = Math.cos(phase + i * 0.35) * 1.0;
-
-          const nX = (Math.cos(theta) * 2.3 + bendX).toFixed(3);
-          const nY = (Math.sin(theta) * 2.3 + bendY).toFixed(3);
-          const nZ = (zBase).toFixed(3);
-
-          const caX = (Math.cos(theta + 0.3) * 2.5 + bendX).toFixed(3);
-          const caY = (Math.sin(theta + 0.3) * 2.5 + bendY).toFixed(3);
-          const caZ = (zBase + 0.5).toFixed(3);
-
-          const cX = (Math.cos(theta + 0.6) * 2.4 + bendX).toFixed(3);
-          const cY = (Math.sin(theta + 0.6) * 2.4 + bendY).toFixed(3);
-          const cZ = (zBase + 1.0).toFixed(3);
-
-          const oX = (Math.cos(theta + 0.7) * 3.2 + bendX).toFixed(3);
-          const oY = (Math.sin(theta + 0.7) * 3.2 + bendY).toFixed(3);
-          const oZ = (zBase + 1.1).toFixed(3);
-
-          const fmt = (idx, name, resName, rNum, x, y, z, elem) =>
-            `ATOM  ${String(idx).padStart(5, ' ')} ${name.padEnd(4, ' ')} ${resName} A${String(rNum).padStart(4, ' ')}    ${String(x).padStart(8, ' ')}${String(y).padStart(8, ' ')}${String(z).padStart(8, ' ')}  1.00 20.00          ${elem.padStart(2, ' ')}`;
-
-          lines.push(fmt(atomIdx++, 'N', res, i + 1, nX, nY, nZ, 'N'));
-          lines.push(fmt(atomIdx++, 'CA', res, i + 1, caX, caY, caZ, 'C'));
-          lines.push(fmt(atomIdx++, 'C', res, i + 1, cX, cY, cZ, 'C'));
-          lines.push(fmt(atomIdx++, 'O', res, i + 1, oX, oY, oZ, 'O'));
-        }
-        lines.push('ENDMDL');
-      }
-      return lines.join('\n');
-    }
-
-
-    function applyVmdRepresentation() {
+    function applyRepresentations() {
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
-      appState.representations = [];
 
-      const colorScheme = appState.colorScheme;
-      const repStyle = appState.repStyle;
+      const rep = appState.repStyle;
+      const color = appState.colorScheme;
 
-      // 1. Primary macromolecule representation
-      let rep;
-      switch (repStyle) {
-        case 'cartoon':
-          rep = appState.component.addRepresentation('cartoon', {
-            colorScheme: colorScheme,
-            aspectRatio: 3.2,
-            scale: 0.8,
-            smoothSheet: true
-          });
-          break;
-        case 'licorice':
-          rep = appState.component.addRepresentation('licorice', {
-            colorScheme: colorScheme,
-            radius: 0.22,
-            multipleBond: 'symmetric'
-          });
-          break;
-        case 'surface':
-          rep = appState.component.addRepresentation('surface', {
-            colorScheme: colorScheme,
-            surfaceType: 'ms',
-            opacity: 0.88
-          });
-          break;
-        case 'spacefill':
-          rep = appState.component.addRepresentation('spacefill', {
-            colorScheme: colorScheme,
-            scale: 0.85
-          });
-          break;
-        case 'ribbon':
-          rep = appState.component.addRepresentation('ribbon', {
-            colorScheme: colorScheme,
-            scale: 1.5
-          });
-          break;
-        case 'trace':
-          rep = appState.component.addRepresentation('trace', {
-            colorScheme: colorScheme,
-            subdiv: 12
-          });
-          break;
-        default:
-          rep = appState.component.addRepresentation('cartoon', { colorScheme: colorScheme });
+      // 1. 蛋白質主體
+      if (rep === 'cartoon') {
+        appState.component.addRepresentation('cartoon', {
+          sele: 'protein',
+          colorScheme: color,
+          aspectRatio: 3.2,
+          scale: 0.8,
+          smoothSheet: true
+        });
+      } else if (rep === 'licorice') {
+        appState.component.addRepresentation('licorice', {
+          sele: 'protein',
+          colorScheme: color,
+          radius: 0.22
+        });
+      } else if (rep === 'surface') {
+        appState.component.addRepresentation('surface', {
+          sele: 'protein',
+          colorScheme: color,
+          surfaceType: 'ms',
+          opacity: 0.85
+        });
+      } else if (rep === 'spacefill') {
+        appState.component.addRepresentation('spacefill', {
+          sele: 'protein',
+          colorScheme: color,
+          scale: 0.85
+        });
+      } else if (rep === 'ribbon') {
+        appState.component.addRepresentation('ribbon', {
+          sele: 'protein',
+          colorScheme: color,
+          scale: 1.4
+        });
+      } else if (rep === 'trace') {
+        appState.component.addRepresentation('trace', {
+          sele: 'protein',
+          colorScheme: color,
+          subdiv: 12
+        });
       }
-      appState.representations.push(rep);
 
-      // 2. Complementary Nucleic Acid depiction if nucleic acids are detected
+      // 2. DNA / 核酸自動配管狀 Licorice
       appState.component.addRepresentation('licorice', {
         sele: 'nucleic',
         colorScheme: 'element',
-        radius: 0.2
+        radius: 0.22
       });
 
-      // 3. Highlight heteroatoms/ions as CPK spheres
+      // 3. 離子與輔因子 (CPK 凡德瓦球體)
       appState.component.addRepresentation('spacefill', {
         sele: 'hetero and not (water or ion)',
         scale: 0.65,
@@ -622,23 +488,72 @@
       });
     }
 
+    /**
+     * 載入 PDB 檔案並掛載動畫 Trajectory
+     */
+    async function loadPdbFile(urlOrFile) {
+      stopPlayback();
+      const displayName = typeof urlOrFile === 'string' ? urlOrFile : urlOrFile.name;
+      showLoading('正在讀取結構軌跡...', displayName);
 
-    function setupTrajectoryUI(frameCount) {
-      appState.totalFrames = frameCount;
-      dom.slider.max = Math.max(0, frameCount - 1);
-      dom.slider.value = 0;
-      dom.sliderTotal.textContent = String(Math.max(0, frameCount - 1));
-      setFrame(0);
+      try {
+        appState.stage.removeAllComponents();
+
+        const comp = await appState.stage.loadFile(urlOrFile, { defaultRepresentation: false });
+        appState.component = comp;
+
+        applyRepresentations();
+        comp.autoView(500);
+
+        // 更新原子數量
+        const atomTotal = comp.structure.atomCount || 0;
+        dom.atomCount.textContent = atomTotal.toLocaleString();
+
+        // 偵測是否為多模型軌跡 (Multi-model Trajectory)
+        const modelCount = comp.structure.modelStore.count || 1;
+
+        if (modelCount > 1) {
+          // 加入軌跡播放器組件
+          const traj = comp.addTrajectory();
+          appState.trajComp = traj;
+          appState.totalFrames = modelCount;
+
+          // 設定時間軸
+          dom.slider.max = modelCount - 1;
+          dom.sliderTotal.textContent = String(modelCount - 1);
+          setFrame(0);
+
+          // 自動開始播放軌跡動畫
+          startPlayback();
+        } else {
+          // 單一影格
+          appState.trajComp = null;
+          appState.totalFrames = 1;
+          dom.slider.max = 0;
+          dom.slider.value = 0;
+          dom.sliderCurr.textContent = '0';
+          dom.sliderTotal.textContent = '0';
+          dom.frameCounter.textContent = '1 / 1 (靜態)';
+        }
+
+        hideLoading();
+      } catch (err) {
+        console.error('PDB 載入失敗:', err);
+        hideLoading();
+        dom.loadingText.textContent = '載入失敗: ' + displayName;
+        dom.loadingSubtext.textContent = '請檢查檔案是否存在且大小寫相符';
+        dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
+        setTimeout(hideLoading, 3000);
+      }
     }
 
-    function setFrame(frameIndex) {
-      if (!appState.trajComp) {
-        dom.frameCounter.textContent = '1 / 1';
-        dom.sliderCurr.textContent = '0';
-        return;
-      }
+    /**
+     * 切換指定影格並同步 UI
+     */
+    function setFrame(fIndex) {
+      if (!appState.trajComp) return;
       const maxF = appState.totalFrames - 1;
-      let target = Math.max(0, Math.min(frameIndex, maxF));
+      let target = Math.max(0, Math.min(fIndex, maxF));
 
       appState.currentFrame = target;
       appState.trajComp.setFrame(target);
@@ -646,19 +561,17 @@
       dom.frameCounter.textContent = `${target} / ${maxF}`;
       dom.slider.value = target;
       dom.sliderCurr.textContent = target;
-
-      const simNs = (target * 0.05).toFixed(2);
-      dom.simTime.textContent = `${simNs} ns`;
     }
 
-    function stepFrame(delta) {
-      let next = appState.currentFrame + delta;
+    function stepFrame(step) {
+      if (appState.totalFrames <= 1) return;
+      let next = appState.currentFrame + step;
       const max = appState.totalFrames - 1;
 
       if (next > max) {
         if (appState.loopMode === 'loop') next = 0;
         else if (appState.loopMode === 'rock') {
-          appState.playbackDirection = -1;
+          appState.direction = -1;
           next = Math.max(0, max - 1);
         } else {
           stopPlayback();
@@ -667,7 +580,7 @@
       } else if (next < 0) {
         if (appState.loopMode === 'loop') next = max;
         else if (appState.loopMode === 'rock') {
-          appState.playbackDirection = 1;
+          appState.direction = 1;
           next = Math.min(max, 1);
         } else {
           stopPlayback();
@@ -677,13 +590,12 @@
       setFrame(next);
     }
 
-    function startPlayback(direction = 1) {
+    function startPlayback() {
       if (appState.totalFrames <= 1) return;
-      if (appState.isPlaying && appState.playbackDirection === direction) return;
       stopPlayback();
       appState.isPlaying = true;
-      appState.playbackDirection = direction;
 
+      // 更新播放按鈕圖示為暫停
       const icon = dom.btnPlay.querySelector('i');
       if (icon) {
         icon.setAttribute('data-lucide', 'pause');
@@ -692,7 +604,7 @@
 
       const intervalMs = Math.round(1000 / appState.fps);
       appState.timerId = setInterval(() => {
-        stepFrame(appState.playbackDirection);
+        stepFrame(appState.direction);
       }, intervalMs);
     }
 
@@ -702,6 +614,7 @@
         clearInterval(appState.timerId);
         appState.timerId = null;
       }
+      // 更新按鈕圖示為播放
       const icon = dom.btnPlay.querySelector('i');
       if (icon) {
         icon.setAttribute('data-lucide', 'play');
@@ -711,10 +624,12 @@
 
     function togglePlay() {
       if (appState.isPlaying) stopPlayback();
-      else startPlayback(1);
+      else startPlayback();
     }
 
-
+    /**
+     * 即時繪製 VMD 座標三軸 (跟隨攝影機旋轉)
+     */
     function drawVmdAxes() {
       const canvas = dom.axesCanvas;
       if (!canvas || !appState.stage) return;
@@ -728,8 +643,8 @@
       const r10 = rot[4], r11 = rot[5], r12 = rot[6];
       const r20 = rot[8], r21 = rot[9], r22 = rot[10];
 
-      const centerX = w / 2;
-      const centerY = h / 2;
+      const cX = w / 2;
+      const cY = h / 2;
       const length = 26;
 
       const axes = [
@@ -749,44 +664,38 @@
         ctx.fillStyle = axis.color;
 
         ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        const endX = centerX + axis.x;
-        const endY = centerY + axis.y;
+        ctx.moveTo(cX, cY);
+        const endX = cX + axis.x;
+        const endY = cY + axis.y;
         ctx.lineTo(endX, endY);
         ctx.stroke();
 
         const offset = 6;
         const mag = Math.sqrt(axis.x * axis.x + axis.y * axis.y) || 1;
-        const labelX = endX + (axis.x / mag) * offset;
-        const labelY = endY + (axis.y / mag) * offset + 3;
+        const lx = endX + (axis.x / mag) * offset;
+        const ly = endY + (axis.y / mag) * offset + 3;
 
-        ctx.fillText(axis.label, labelX - 3, labelY);
+        ctx.fillText(axis.label, lx - 3, ly);
       });
 
+      // 軸心點
       ctx.fillStyle = '#94a3b8';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 2.5, 0, Math.PI * 2);
+      ctx.arc(cX, cY, 2.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
-
-    function initListeners() {
-      // Dropdown file change
+    function initEvents() {
+      // 檔案切換
       dom.fileSelector.addEventListener('change', (e) => {
-        loadSelectedPdb(e.target.value);
+        loadPdbFile(e.target.value);
       });
 
-      // Refresh directory scan
-      dom.btnRefreshFiles.addEventListener('click', () => {
-        scanDirectoryForPdbs();
-      });
+      // 重新整理
+      dom.btnRefreshFiles.addEventListener('click', scanPdbFiles);
 
-      // Transport controls
+      // 播放控制器
       dom.btnPlay.addEventListener('click', togglePlay);
-      dom.btnPlayRev.addEventListener('click', () => {
-        if (appState.isPlaying && appState.playbackDirection === -1) stopPlayback();
-        else startPlayback(-1);
-      });
       dom.btnPrevFrame.addEventListener('click', () => {
         stopPlayback();
         stepFrame(-1);
@@ -804,38 +713,38 @@
         setFrame(appState.totalFrames - 1);
       });
 
-      // Slider
+      // 時間軸拉桿
       dom.slider.addEventListener('input', (e) => {
         stopPlayback();
         setFrame(parseInt(e.target.value, 10));
       });
 
-      // Loop mode cycle
+      // 循環模式 (LOOP -> ROCK -> ONCE)
       dom.btnLoopMode.addEventListener('click', () => {
         if (appState.loopMode === 'loop') {
           appState.loopMode = 'rock';
-          dom.loopLabel.textContent = 'ROCK';
+          dom.loopLabel.textContent = '往返 (ROCK)';
         } else if (appState.loopMode === 'rock') {
           appState.loopMode = 'once';
-          dom.loopLabel.textContent = 'ONCE';
+          dom.loopLabel.textContent = '單次 (ONCE)';
         } else {
           appState.loopMode = 'loop';
-          dom.loopLabel.textContent = 'LOOP';
+          dom.loopLabel.textContent = '循環 (LOOP)';
         }
       });
 
-      // FPS speed
+      // FPS 速度調整
       dom.fpsSelect.addEventListener('change', (e) => {
         appState.fps = parseInt(e.target.value, 10);
-        if (appState.isPlaying) startPlayback(appState.playbackDirection);
+        if (appState.isPlaying) startPlayback();
       });
 
-      // Reset Camera
+      // 重設視角
       dom.btnResetView.addEventListener('click', () => {
         if (appState.component) appState.component.autoView(500);
       });
 
-      // Representation panel
+      // 樣式選單開關
       dom.btnToggleRep.addEventListener('click', () => {
         dom.repModal.classList.toggle('hidden');
       });
@@ -843,6 +752,7 @@
         dom.repModal.classList.add('hidden');
       });
 
+      // 幾何樣式切換按鈕
       document.querySelectorAll('.rep-style-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.rep-style-btn').forEach(b => {
@@ -853,61 +763,36 @@
           btn.classList.remove('border-slate-700', 'bg-slate-800/50', 'text-slate-300');
 
           appState.repStyle = btn.dataset.rep;
-          applyVmdRepresentation();
+          applyRepresentations();
         });
       });
 
+      // 配色切換
       dom.colorSelect.addEventListener('change', (e) => {
         appState.colorScheme = e.target.value;
-        applyVmdRepresentation();
+        applyRepresentations();
       });
 
-      // Upload local PDB
+      // 本地檔案上傳備用
       dom.btnOpenFile.addEventListener('click', () => dom.fileInputLocal.click());
-      dom.fileInputLocal.addEventListener('change', async (e) => {
+      dom.fileInputLocal.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Add file to selector
         const opt = document.createElement('option');
         opt.value = file.name;
-        opt.textContent = `Local: ${file.name}`;
+        opt.textContent = `本機: ${file.name}`;
         dom.fileSelector.prepend(opt);
         dom.fileSelector.value = file.name;
 
-        stopPlayback();
-        showLoading('Loading Local File...', file.name);
-
-        try {
-          appState.stage.removeAllComponents();
-          const comp = await appState.stage.loadFile(file, { defaultRepresentation: false });
-          appState.component = comp;
-          applyVmdRepresentation();
-          comp.autoView(600);
-
-          const count = comp.structure.modelStore.count || 1;
-          dom.atomCount.textContent = (comp.structure.atomCount || 0).toLocaleString();
-
-          if (count > 1) {
-            const traj = comp.addTrajectory();
-            appState.trajComp = traj;
-            setupTrajectoryUI(count);
-            startPlayback();
-          } else {
-            setupTrajectoryUI(1);
-          }
-          hideLoading();
-        } catch (err) {
-          hideLoading();
-          console.error(err);
-        }
+        loadPdbFile(file);
       });
 
-      // Help modal
+      // 說明面板
       dom.btnInfo.addEventListener('click', () => dom.infoModal.classList.remove('hidden'));
       dom.btnCloseInfo.addEventListener('click', () => dom.infoModal.classList.add('hidden'));
 
-      // Keyboard
+      // 鍵盤操作
       window.addEventListener('keydown', (e) => {
         if (['INPUT', 'SELECT'].includes(e.target.tagName)) return;
         if (e.code === 'Space') {
@@ -925,18 +810,17 @@
       });
     }
 
-    // Initialize Stage
     window.addEventListener('load', () => {
+      // 建立 NGL 舞台 (VMD 經典暗黑藍色底)
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
         cameraType: 'perspective',
         ambientColor: 0xffffff,
-        ambientIntensity: 0.4,
+        ambientIntensity: 0.45,
         lightColor: 0xffffff,
         lightIntensity: 0.85,
-        fogNear: 60,
-        fogFar: 100,
-        sampleLevel: 1
+        fogNear: 50,
+        fogFar: 100
       });
 
       window.addEventListener('resize', () => {
@@ -946,8 +830,8 @@
 
       appState.stage.viewerControls.signals.changed.add(drawVmdAxes);
 
-      initListeners();
-      scanDirectoryForPdbs();
+      initEvents();
+      scanPdbFiles();
       setInterval(drawVmdAxes, 60);
     });
   </script>
