@@ -566,18 +566,20 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD Ladder Rungs：乾淨單桿連接骨架與鹼基，絕不畫雜亂化學鍵)
+    // 3. DNA 階梯橫竿 (還原乾淨的 VMD Ladder 鹼基，徹底過濾氫原子刺)
       if (dRep === 'vmd_ladder') {
-        // 從骨架 C1' 延伸至鹼基環心質心，形成整齊的梯竿 (只有一根根橫竿，不拆解環化學鍵)
-        appState.component.addRepresentation('tube', {
-          sele: 'not protein and not hydrogen and not resname ZN and (.C1\' or .N9 or .N1)',
+        // 嚴格過濾氫原子 (not hydrogen) 與骨架 (not backbone)
+        // 這樣只會留下純淨的鹼基環棒，且緊密相連骨架，中間絕不空心
+        appState.component.addRepresentation('licorice', {
+          sele: 'nucleic and not backbone and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
-          radius: 0.22,
-          subdiv: 6
+          radius: 0.20,
+          multipleBond: 'off'
         });
       } else if (dRep === 'licorice') {
+        // 全 Licorice 模式 (整條 DNA 包含主鏈骨架都畫棒狀)
         appState.component.addRepresentation('licorice', {
-          sele: 'not protein and not hydrogen and not resname ZN',
+          sele: 'nucleic and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
           radius: 0.22,
           multipleBond: 'off'
