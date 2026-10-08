@@ -384,30 +384,13 @@
       return { colorScheme: colorVal };
     }
 
-    /**
+/**
      * 動態分析結構：短柱起點改抓核糖內側 C1'，終點取鹼基芳香環中心原子
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
       let zincIdx = -1;
-      // 標記每股的端點殘基 (5' 端與 3' 端)
-      const terminalResnoSet = new Set();
-      strandGroups.forEach(grp => {
-        if (grp.length > 0) {
-          terminalResnoSet.add(grp[0].resno);
-          terminalResnoSet.add(grp[grp.length - 1].resno);
-        }
-      });
 
-      // 產生短柱資料
-      appState.dnaRungStubs = nucleicResList.map(item => ({
-        anchor: item.c1Index,
-        target: item.ringIndex,
-        resname: item.resname,
-        resno: item.resno,
-        isTerminal: terminalResnoSet.has(item.resno)
-      }));
-      
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -501,11 +484,22 @@
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // 每個殘基各自獨立伸出短柱 (Stubs)，支援動態解離散開
+      // ★ 標記每股的端點殘基 (5' 端與 3' 端) —— 在 strandGroups 產生後才標記
+      const terminalResnoSet = new Set();
+      strandGroups.forEach(grp => {
+        if (grp.length > 0) {
+          terminalResnoSet.add(grp[0].resno);
+          terminalResnoSet.add(grp[grp.length - 1].resno);
+        }
+      });
+
+      // 產生短柱資料
       appState.dnaRungStubs = nucleicResList.map(item => ({
         anchor: item.c1Index,
         target: item.ringIndex,
-        resname: item.resname
+        resname: item.resname,
+        resno: item.resno,
+        isTerminal: terminalResnoSet.has(item.resno)
       }));
 
       // 結合口袋計算 (3.5 Å 空間接觸)
@@ -737,22 +731,6 @@
           });
         }
       }
-          // 繪製圓柱本體
-          shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
-          shape.addSphere([endX, endY, endZ], color, stubRadius);
-
-          // ★ 動態適應 fraying：若是末端殘基，補上與彩帶主鏈顏色相同的銜接段
-          if (stub.isTerminal) {
-            // 取湖水藍骨架色 (RGB: 0.49, 0.83, 0.99，對應 #7dd3fc)
-            const bbColor = [0.49, 0.83, 0.99];
-            // 在起點補上一個骨架銜接圓帽，消除末端突然斷開的稜角
-            shape.addSphere([startX, startY, startZ], bbColor, stubRadius * 1.05);
-
-            // 若有骨架 P 原子，補一小段同色彩帶牽引棒，保證解離時連著主鏈
-            if (stub.p) {
-              shape.addCylinder([stub.p.x, stub.p.y, stub.p.z], [startX, startY, startZ], bbColor, 0.28);
-            }
-          }
     }
 
     function toggleFocusInterface() {
