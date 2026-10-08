@@ -277,22 +277,6 @@
 
     lucide.createIcons();
 
-    // 註冊客製化二級結構配色方案 (Sheet 鮮黃、Helix 鮮紅、Loop 經典湖水青藍)
-    if (NGL.ColorRegistry) {
-      NGL.ColorRegistry.add('custom-sstruc', function (params) {
-        this.atomColor = function (atom) {
-          const ss = atom.sstruc;
-          if (ss === 'e' || ss === 's') {
-            return 0xEAB308; // 鮮黃色 (Beta-Sheet)
-          } else if (ss === 'h' || ss === 'g' || ss === 'i') {
-            return 0xEF4444; // 鮮紅色 (Alpha-Helix)
-          } else {
-            return 0x38BDF8; // 青藍色 (Coil / Loop)
-          }
-        };
-      });
-    }
-
     const dom = {
       viewport: document.getElementById('viewport'),
       loadingOverlay: document.getElementById('loading-overlay'),
@@ -336,9 +320,6 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    /**
-     * 純通用檔案掃描：僅依靠 URL 參數或託管環境 API，不使用硬編碼預設候選檔名
-     */
     async function scanFolderFiles() {
       if (appState.isLoadingFile) return;
 
@@ -393,8 +374,122 @@
       return { colorScheme: colorVal };
     }
 
+    function calculateDihedralAngle(p1, p2, p3, p4) {
+      const b1 = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
+      const b2 = { x: p3.x - p2.x, y: p3.y - p2.y, z: p3.z - p2.z };
+      const b3 = { x: p4.x - p3.x, y: p4.y - p3.y, z: p4.z - p3.z };
+
+      const n1 = {
+        x: b1.y * b2.z - b1.z * b2.y,
+        y: b1.z * b2.x - b1.x * b2.z,
+        z: b1.x * b2.y - b1.y * b2.x
+      };
+      const n2 = {
+        x: b2.y * b3.z - b2.z * b3.y,
+        y: b2.z * b3.x - b2.x * b3.z,
+        z: b2.x * b3.y - b2.y * b3.x
+      };
+
+      const lenB2 = Math.sqrt(b2.x * b2.x + b2.y * b2.y + b2.z * b2.z);
+      if (lenB2 < 1e-6) return 0;
+      const b2u = { x: b2.x / lenB2, y: b2.y / lenB2, z: b2.z / lenB2 };
+      const m1 = {
+        x: n1.y * b2u.z - n1.z * b2u.y,
+        y: n1.z * b2u.x - n1.x * b2u.z,
+        z: n1.x * b2u.y - n1.y * b2u.x
+      };
+
+      const x = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+      const y = m1.x * n2.x + m1.y * n2.y + m1.z * n2.z;
+      return Math.atan2(y, x) * (180 / Math.PI);
+    }
+
     /**
-     * 動態分析結構：處理 DNA 分股、短柱座標與結合口袋 (完全不硬編碼任何殘基)
+     * 強制覆寫結構的二級結構標籤 (直接寫入 Residue sstruc，使 NGL 原生卡通箭頭與顏色全面生效)
+     */
+    function assignSecondaryStructureDirectly(structure) {
+      structure.eachPolymer(polymer => {
+        if (!polymer.isProtein()) return;
+
+        const residues = [];
+        polymer.eachResidue(r => residues.push(r));
+        const n = residues.length;
+        if (n < 3) return;
+
+        const ssTypes = new Array(n).fill('c');
+
+        for (let i = 1; i < n - 1; i++) {
+          const prev = residues[i - 1];
+          const curr = residues[i];
+          const next = residues[i + 1];
+
+          let cPrev = null, nCurr = null, caCurr = null, cCurr = null, nNext = null;
+          let caPrev = null, caNext = null;
+
+          prev.eachAtom(a => { 
+            if (a.atomname === 'C') cPrev = a; 
+            if (a.atomname === 'CA') caPrev = a;
+          });
+          curr.eachAtom(a => {
+            if (a.atomname === 'N') nCurr = a;
+            if (a.atomname === 'CA') caCurr = a;
+            if (a.atomname === 'C') cCurr = a;
+          });
+          next.eachAtom(a => { 
+            if (a.atomname === 'N') nNext = a; 
+            if (a.atomname === 'CA') caNext = a;
+          });
+
+          if (cPrev && nCurr && caCurr && cCurr && nNext) {
+            const phi = calculateDihedralAngle(cPrev, nCurr, caCurr, cCurr);
+            const psi = calculateDihedralAngle(nCurr, caCurr, cCurr, nNext);
+
+            let caDist = 0;
+            if (caPrev && caNext) {
+              const dx = caPrev.x - caNext.x;
+              const dy = caPrev.y - caNext.y;
+              const dz = caPrev.z - caNext.z;
+              caDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
+
+            // 經典延伸構象判定 (Beta-strand)
+            const isBeta = (phi >= -180 && phi <= -40) && 
+                           ((psi >= 60 && psi <= 180) || (psi >= -180 && psi <= -140)) &&
+                           (caDist >= 5.8);
+
+            // 經典螺旋判定 (Alpha-helix)
+            const isHelix = (phi >= -120 && phi <= -40) && (psi >= -70 && psi <= -10);
+
+            if (isBeta) ssTypes[i] = 'e';
+            else if (isHelix) ssTypes[i] = 'h';
+          }
+        }
+
+        // 平滑過濾：至少連續 2 個殘基才視為穩定片層/螺旋，避免孤立熱震盪誤判
+        for (let i = 0; i < n; i++) {
+          if (ssTypes[i] === 'e') {
+            const hasNeighbor = (i > 0 && ssTypes[i - 1] === 'e') || (i < n - 1 && ssTypes[i + 1] === 'e');
+            if (hasNeighbor) {
+              residues[i].sstruc = 'e';
+            } else {
+              residues[i].sstruc = 'c';
+            }
+          } else if (ssTypes[i] === 'h') {
+            const hasNeighbor = (i > 0 && ssTypes[i - 1] === 'h') || (i < n - 1 && ssTypes[i + 1] === 'h');
+            if (hasNeighbor) {
+              residues[i].sstruc = 'h';
+            } else {
+              residues[i].sstruc = 'c';
+            }
+          } else {
+            residues[i].sstruc = 'c';
+          }
+        }
+      });
+    }
+
+    /**
+     * 動態分析結構：處理 DNA 分股、短柱座標與結合口袋 (完全通用)
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -458,7 +553,7 @@
         return;
       }
 
-      // 依據前後殘基 O3' 到 P 距離切斷股
+      // 依據前後殘基距離分股
       const strandGroups = [];
       let curGroup = [nucleicResList[0]];
 
@@ -483,14 +578,12 @@
       }
       if (curGroup.length > 0) strandGroups.push(curGroup);
 
-      // 分股選取字串
       appState.dnaStrandSelections = strandGroups.map(grp => {
         const minR = grp[0].resno;
         const maxR = grp[grp.length - 1].resno;
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // 產生短柱資料
       appState.dnaRungStubs = nucleicResList.map(item => ({
         anchor: item.c1Index,
         target: item.ringIndex,
@@ -539,13 +632,12 @@
     }
 
     /**
-     * 重建所有 Representation
+     * 重建所有 Representation (使用原生安全著色與連續平滑卡通骨架)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
 
-      // 清除舊階梯短柱形狀
       if (appState.ladderShapeComp) {
         appState.stage.removeComponent(appState.ladderShapeComp);
         appState.ladderShapeComp = null;
@@ -555,42 +647,38 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體：保持一整條完整連續 Spline 繪製，絕不斷裂
+      // 1. 蛋白質主體：保持一整條完整連續 Spline 繪製，絕不斷裂、絕不黑掉
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
-        let protColorConfig = {};
-        if (appState.protColor === 'sstruc') {
-          protColorConfig = { colorScheme: 'custom-sstruc' };
-        } else {
-          protColorConfig = getColorParams(appState.protColor);
-        }
+        const colorOpts = (appState.protColor === 'sstruc') 
+          ? { colorScheme: 'sstruc' } 
+          : getColorParams(appState.protColor);
 
-        // 單一連續 Cartoon：由 NGL 內部自動產生平滑方向箭頭
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
-          ...protColorConfig,
-          aspectRatio: 5.5,
-          scale: 0.9,
-          arrows: true,
-          arrowSize: 2.2,
-          smoothSheet: true,
+          ...colorOpts,
+          aspectRatio: 6.0,   // 寬扁比
+          scale: 1.0,
+          arrows: true,       // ★ NGL 原生雙向立體方向箭頭
+          arrowSize: 2.2,     // 箭頭尺寸
+          smoothSheet: true,  // 平滑收斂
           subdiv: 10
         });
 
       } else if (pRep === 'tube') {
-        const pColorParams = (appState.protColor === 'sstruc') ? { colorScheme: 'custom-sstruc' } : getColorParams(appState.protColor);
+        const colorOpts = (appState.protColor === 'sstruc') ? { color: '#38bdf8' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
-          ...pColorParams,
+          ...colorOpts,
           radius: 0.28,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
-        const pColorParams = (appState.protColor === 'sstruc') ? { colorScheme: 'element' } : getColorParams(appState.protColor);
+        const colorOpts = (appState.protColor === 'sstruc') ? { colorScheme: 'element' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('licorice', {
           sele: protSele,
-          ...pColorParams,
+          ...colorOpts,
           radius: 0.2,
           multipleBond: 'off'
         });
@@ -626,10 +714,10 @@
           const structure = appState.component.structure;
 
           const baseColorPalette = {
-            'A': [0.22, 0.35, 0.95], // 鮮藍
-            'T': [0.92, 0.28, 0.35], // 鮮紅
-            'C': [0.95, 0.58, 0.20], // 暖橘
-            'G': [0.15, 0.80, 0.25], // 鮮綠
+            'A': [0.22, 0.35, 0.95],
+            'T': [0.92, 0.28, 0.35],
+            'C': [0.95, 0.58, 0.20],
+            'G': [0.15, 0.80, 0.25],
             'U': [0.92, 0.28, 0.35]
           };
 
@@ -851,7 +939,7 @@
     }
 
     /**
-     * 載入 PDB 檔案 (正規化特殊殘基並採用權威 DSSP 演算法識別二級結構)
+     * 載入 PDB 檔案 (正規化特殊殘基並強制直接標記二級結構)
      */
     async function loadPdbFile(url) {
       if (appState.isLoadingFile) return;
@@ -871,17 +959,15 @@
         });
         appState.component = comp;
 
-        // 修復 Amber/MD 非標準殘基（CYM/HIE），使 NGL 正確認為胜肽主鏈
+        // 修復 Amber/MD 非標準殘基命名
         comp.structure.eachResidue(r => {
           const rn = (r.resname || '').trim().toUpperCase();
           if (rn === 'CYM') r.resname = 'CYS';
           if (rn === 'HIE' || rn === 'HID' || rn === 'HIP') r.resname = 'HIS';
         });
 
-        // 強制執行 NGL 核心內建的 DSSP 骨架氫鍵網絡辨識
-        if (typeof comp.structure.autoSecondaryStructure === 'function') {
-          comp.structure.autoSecondaryStructure();
-        }
+        // 核心：直接將幾何計算出的 sheet/helix 賦予到殘基的 sstruc 屬性中
+        assignSecondaryStructureDirectly(comp.structure);
 
         try {
           analyzeStructureDynamically(comp.structure);
