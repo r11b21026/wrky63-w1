@@ -563,7 +563,7 @@
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
               radiusType: 'size',   // 關鍵 1：告訴 NGL 改用手動指定的固定尺寸
-              radiusSize: 1,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
+              radiusSize: 0.8,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
               aspectRatio: 4,    // 寬厚比調低：厚度大幅增加，輕鬆包覆短柱
               smoothSheet: false,   // 保留立體截面飽滿度
               subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
@@ -617,9 +617,9 @@
 
                 // 核心技巧：
                 // 起點從骨架往鹼基方向縮進 0.4 Å（剛好落在彩帶正面內壁，絕不刺破彩帶背部）
-                const startX = aBackbone.x + ux * 0.4;
-                const startY = aBackbone.y + uy * 0.4;
-                const startZ = aBackbone.z + uz * 0.4;
+                const startX = aBackbone.x + ux * 0.5;
+                const startY = aBackbone.y + uy * 0.5;
+                const startZ = aBackbone.z + uz * 0.5;
 
                 // 終點：直接連到鹼基環核心原子
                 const endX = aBase.x;
