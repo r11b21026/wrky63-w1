@@ -567,7 +567,30 @@
       }
 
       // 3. DNA 階梯橫竿 (VMD 原生膠囊短柱：從 C1' 出發不刺穿骨架，端點圓弧閉合)
-      if (dRep === 'vmd_ladder') {
+     // ==================== 方案 A 測試分支 (原生 base) ====================
+  if (dRep === 'vmd_ladder_native') {
+  // 如果之前有自己畫的 Shape，先藏起來或清除，避免重疊
+  if (appState.ladderShapeComp) {
+    appState.ladderShapeComp.setVisibility(false);
+  }
+
+  // 註冊 VMD 配色
+  const vmdScheme = NGL.ColormakerRegistry.addSelectionColorMaker([
+    [ "#3859F2", "DA or A" ],
+    [ "#EB4759", "DT or T or U" ],
+    [ "#F29433", "DC or C" ],
+    [ "#26CC40", "DG or G" ]
+  ]);
+
+  // 直接掛上 NGL 原生 base
+  appState.component.addRepresentation('base', {
+    sele: 'nucleic and not protein',
+    color: vmdScheme,
+    radius: 0.36
+  });
+
+// ==================== 原本方案 B (完整保留原程式碼) ====================
+} else if (dRep === 'vmd_ladder') {
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
           const shape = new NGL.Shape("vmd_rungs");
           const structure = appState.component.structure;
