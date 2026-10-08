@@ -399,15 +399,13 @@
         }
       });
 
-      // 產生短柱時標記 isTerminal
+      // 產生短柱資料
       appState.dnaRungStubs = nucleicResList.map(item => ({
         anchor: item.c1Index,
         target: item.ringIndex,
         resname: item.resname,
         resno: item.resno,
-        isTerminal: terminalResnoSet.has(item.resno),
-        o3: item.o3,
-        p: item.p
+        isTerminal: terminalResnoSet.has(item.resno)
       }));
       
       structure.eachResidue(r => {
@@ -614,7 +612,7 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (自動貼齊彩帶表面，絕不浮空、絕不穿刺背面)
+      // 3. DNA 階梯橫竿 (VMD 經典短柱 + 末端 fraying 動態防騰空)
       if (dRep === 'vmd_ladder') {
         if (appState.ladderShapeComp) {
           appState.stage.removeComponent(appState.ladderShapeComp);
@@ -641,8 +639,8 @@
           const stubRadius = 0.48;
 
           appState.dnaRungStubs.forEach(stub => {
-            const aBackbone = structure.getAtomProxy(stub.anchor); // 骨架 P / C4'
-            const aBase = structure.getAtomProxy(stub.target);     // 鹼基核心
+            const aBackbone = structure.getAtomProxy(stub.anchor);
+            const aBase = structure.getAtomProxy(stub.target);
 
             if (aBackbone && aBase) {
               const color = parseBaseColor(stub.resname);
@@ -652,27 +650,31 @@
               const dz = aBase.z - aBackbone.z;
               const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-              if (dist > 1.0) {
+              if (dist > 0.8) {
                 const ux = dx / dist;
                 const uy = dy / dist;
                 const uz = dz / dist;
 
-                // 核心技巧：
-                // 起點從骨架往鹼基方向縮進 0.4 Å（剛好落在彩帶正面內壁，絕不刺破彩帶背部）
+                // 起點微縮 0.75 Å，藏在彩帶腹中
                 const startX = aBackbone.x + ux * 1.2;
                 const startY = aBackbone.y + uy * 1.2;
                 const startZ = aBackbone.z + uz * 1.2;
 
-                // 終點：直接連到鹼基環核心原子
                 const endX = aBase.x;
                 const endY = aBase.y;
                 const endZ = aBase.z;
 
-                // 實心圓柱本體
+                // 柱身與端點球
                 shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
-                
-                // 鹼基端做圓弧倒角 (Cap)
                 shape.addSphere([endX, endY, endZ], color, stubRadius);
+
+                // 末端 fraying 支撐（補上一小段主鏈同色接頭）
+                if (stub.isTerminal) {
+                  const bbColor = [0.49, 0.83, 0.99]; // 骨架青藍色
+                  shape.addSphere([startX, startY, startZ], bbColor, stubRadius * 1.05);
+                  // 從骨架原子連回內縮起點，形成無縫小韌帶，消除騰空
+                  shape.addCylinder([aBackbone.x, aBackbone.y, aBackbone.z], [startX, startY, startZ], bbColor, 0.3);
+                }
               }
             }
           });
@@ -680,6 +682,7 @@
           appState.ladderShapeComp = appState.stage.addComponentFromObject(shape);
           appState.ladderShapeComp.addRepresentation("buffer");
         }
+      }
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
