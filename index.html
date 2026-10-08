@@ -153,8 +153,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_sstruc" selected>VMD 二級結構 (黃Sheet/白Loop)</option>
-            <option value="sstruc">預設二級結構</option>
+            <option value="sstruc">預設二級結構 (紅Helix/黃Sheet/青Loop)</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
@@ -261,7 +260,7 @@
       timerId: null,
       fps: 20,
       protStyle: 'newcartoon',
-      protColor: 'vmd_sstruc', // 預設使用正統 VMD 二級結構配色 (黃色 sheet / 白色 loop)
+      protColor: 'sstruc', // 預設使用正統 VMD 二級結構配色 (黃色 sheet / 白色 loop)
       dnaStyle: 'vmd_ladder',
       dnaColor: '#7dd3fc',
       showBaseLabels: false,
@@ -558,58 +557,33 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：PyMOL 經典寬箭頭 + 細線繩 Loop
+// 1. 蛋白質主體：極致優化原生二級結構 (超寬立體 Beta-Sheet 箭頭 + 抑制 Loop 亂黃)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
+      const pColorParams = getColorParams(appState.protColor);
 
       if (pRep === 'newcartoon') {
-        const vmdSchemeName = 'pymol_sstruc_color';
-        try {
-          NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
-            this.atomColor = function (atom) {
-              const ss = atom.sstruc;
-              if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
-              if (ss === 'h' || ss === 'g' || ss === 'i') return 0xA855F7; // 洋紅紫 (Alpha Helix)
-              return 0xE2E8F0; // 亮白/銀灰 (Loop 細線)
-            };
-            this.atomColorToArray = function (atom, array, offset) {
-              const ss = atom.sstruc;
-              if (ss === 's') {
-                array[offset] = 0.918; array[offset + 1] = 0.702; array[offset + 2] = 0.031; // 黃
-              } else if (ss === 'h' || ss === 'g' || ss === 'i') {
-                array[offset] = 0.659; array[offset + 1] = 0.333; array[offset + 2] = 0.969; // 紫
-              } else {
-                array[offset] = 0.886; array[offset + 1] = 0.910; array[offset + 2] = 0.941; // 白
-              }
-              return array;
-            };
-          });
-        } catch (e) {}
-
-        const colorCfg = (appState.protColor === 'vmd_sstruc') 
-          ? { colorScheme: vmdSchemeName } 
-          : getColorParams(appState.protColor);
-
+        // ★ 核心優化：
+        // 1. aspectRatio 調高至 7.5 ~ 8.0：Beta-Sheet 寬度大幅擴張，展現如 PyMOL 般的飽滿厚刃感！
+        // 2. 由於寬高比被大幅拉開，非 Sheet 區域 (Loop/Turn) 會被自動緊縮成細薄的流線，不會有一大片泛黃的雜亂感
+        // 3. arrows: true 搭配 arrowSize: 1.8，使片層末端的箭頭巨大化、立體可辨
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
-          ...colorCfg,
-          // ★ PyMOL 核心幾何參數：
-          aspectRatio: 6.0,     // 數值調大：Sheet 大幅變寬且平整，Loop 自動收縮成細圓線
-          scale: 1.0,           // 寬度飽滿
-          arrows: true,         // ★ 關鍵：Sheet 末端生成 PyMOL 經典實心立體箭頭
-          arrowSize: 1.4,       // 放大箭頭頭部，輪廓極其分明
-          smoothSheet: true,    // Sheet 表面像刀刃一樣平整
-          subdiv: 12            // 幾何採樣精細，邊緣銳利清晰
+          ...pColorParams,
+          aspectRatio: 7.5,     // 數值極致拉大：Sheet 變得極寬，Loop/Turn 被壓縮收細
+          scale: 1.1,           // 寬度比例飽滿
+          arrows: true,         // ★ 啟用方向箭頭
+          arrowSize: 1.8,       // ★ 大幅放大箭頭倒角，確保一眼看到明確的箭頭來回
+          smoothSheet: true,    // Sheet 表面刀刃般平整
+          subdiv: 12            // 採樣精準，折角分明
         });
       } else if (pRep === 'tube') {
-        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#E2E8F0' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
-          radius: 0.25,
+          radius: 0.28,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
-        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { colorScheme: 'element' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('licorice', {
           sele: protSele,
           ...pColorParams,
