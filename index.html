@@ -378,19 +378,24 @@
 
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
-          let o3 = null, p = null, anchorC1 = null, baseRing = null;
+          let o3 = null, p = null;
+          let backboneAtom = null;
+          let baseRing = null;
 
           r.eachAtom(a => {
             const aname = a.atomname.trim();
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
-            if (aname === "P") p = { x: a.x, y: a.y, z: a.z };
-
-            // 1. 骨架起點：嚴格取核糖內側 C1'，保證從骨架內緣發出，絕不穿透外部彩帶
-            if (aname === "C1'" || aname === "C1*") {
-              anchorC1 = a.index;
+            if (aname === "P") {
+              p = { x: a.x, y: a.y, z: a.z };
+              backboneAtom = a.index; // 優先以 P 作為彩帶核心起點
             }
 
-            // 2. 鹼基指向中心：取環的核心中心原子 (N1/N3/C4)
+            // 備用骨架原子（若沒有 P，例如 5' 端）
+            if (!backboneAtom && (aname === "C4'" || aname === "C3'" || aname === "C1'")) {
+              backboneAtom = a.index;
+            }
+
+            // 鹼基指向中心：嘌呤取 C4/N1，嘧啶取 N3/C4
             if (aname === "N1" || aname === "N3" || aname === "C4") {
               if (!baseRing || aname === "N1" || aname === "N3") {
                 baseRing = a.index;
@@ -398,12 +403,12 @@
             }
           });
 
-          // 保底防呆
-          if (!anchorC1) {
-            r.eachAtom(a => { if (!anchorC1) anchorC1 = a.index; });
+          // 保底
+          if (!backboneAtom) {
+            r.eachAtom(a => { if (!backboneAtom) backboneAtom = a.index; });
           }
           if (!baseRing) {
-            baseRing = anchorC1;
+            baseRing = backboneAtom;
           }
 
           nucleicResList.push({
@@ -411,8 +416,8 @@
             chain: (r.chainname || 'A').trim(),
             resname: rname,
             o3: o3, p: p,
-            c1Index: anchorC1,
-            ringIndex: baseRing
+            c1Index: backboneAtom, // 起點存入骨架原子
+            ringIndex: baseRing    // 終點存入鹼基核心
           });
         }
       });
@@ -566,63 +571,65 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD 原生膠囊短柱：從 C1' 出發不刺穿骨架，端點圓弧閉合)
+      // 3. DNA 階梯橫竿 (自動貼齊彩帶表面，絕不浮空、絕不穿刺背面)
       if (dRep === 'vmd_ladder') {
+        if (appState.ladderShapeComp) {
+          appState.stage.removeComponent(appState.ladderShapeComp);
+          appState.ladderShapeComp = null;
+        }
+
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
           const shape = new NGL.Shape("vmd_rungs");
           const structure = appState.component.structure;
 
-          // VMD 經典鹼基專屬配色 (RGB 比例)
           const baseColorPalette = {
-            'A': [0.22, 0.35, 0.95], // 鮮藍
-            'T': [0.92, 0.28, 0.35], // 鮮紅/粉紅
-            'C': [0.95, 0.58, 0.20], // 暖橘
-            'G': [0.15, 0.80, 0.25], // 鮮綠
+            'A': [0.22, 0.35, 0.95],
+            'T': [0.92, 0.28, 0.35],
+            'C': [0.95, 0.58, 0.20],
+            'G': [0.15, 0.80, 0.25],
             'U': [0.92, 0.28, 0.35]
           };
 
           const parseBaseColor = (rname) => {
-            const raw = (rname || '').trim().toUpperCase();
-            const clean = raw.replace(/^D/, '').replace(/[35]$/, '');
+            const clean = (rname || '').trim().toUpperCase().replace(/^D/, '').replace(/[35]$/, '');
             return baseColorPalette[clean] || [0.8, 0.84, 0.89];
           };
 
-          // 幾何參數：半徑 0.36 Å (具分量感)，長度 3.45 Å (端點剛好抵達環中心配對面)
           const stubRadius = 0.36;
-          const stubLength = 3.45;
 
           appState.dnaRungStubs.forEach(stub => {
-            const aStart = structure.getAtomProxy(stub.anchor);
-            const aEnd = structure.getAtomProxy(stub.target);
+            const aBackbone = structure.getAtomProxy(stub.anchor); // 骨架 P / C4'
+            const aBase = structure.getAtomProxy(stub.target);     // 鹼基核心
 
-            if (aStart && aEnd) {
+            if (aBackbone && aBase) {
               const color = parseBaseColor(stub.resname);
 
-              const dx = aEnd.x - aStart.x;
-              const dy = aEnd.y - aStart.y;
-              const dz = aEnd.z - aStart.z;
+              const dx = aBase.x - aBackbone.x;
+              const dy = aBase.y - aBackbone.y;
+              const dz = aBase.z - aBackbone.z;
               const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-              if (dist > 0.5) {
-                // 方向單位向量
+              if (dist > 1.0) {
                 const ux = dx / dist;
                 const uy = dy / dist;
                 const uz = dz / dist;
 
-                // 起點反向微推 0.65 Å，剛好嵌入彩帶厚度內壁，消除空隙同時不刺穿背部
-                const startX = aStart.x - ux * 0.65;
-                const startY = aStart.y - uy * 0.65;
-                const startZ = aStart.z - uz * 0.65;
+                // 核心技巧：
+                // 起點從骨架往鹼基方向縮進 0.4 Å（剛好落在彩帶正面內壁，絕不刺破彩帶背部）
+                const startX = aBackbone.x + ux * 0.4;
+                const startY = aBackbone.y + uy * 0.4;
+                const startZ = aBackbone.z + uz * 0.4;
 
-                // 終點直達鹼基中心原子，避免懸空
-                const endX = aEnd.x;
-                const endY = aEnd.y;
-                const endZ = aEnd.z;
+                // 終點：直接連到鹼基環核心原子
+                const endX = aBase.x;
+                const endY = aBase.y;
+                const endZ = aBase.z;
 
-                // 繪製圓柱與端點圓球（膠囊 Cap）
+                // 實心圓柱本體
                 shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
+                
+                // 鹼基端做圓弧倒角 (Cap)
                 shape.addSphere([endX, endY, endZ], color, stubRadius);
-                shape.addSphere([startX, startY, startZ], color, stubRadius);
               }
             }
           });
