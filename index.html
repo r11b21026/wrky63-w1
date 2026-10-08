@@ -65,7 +65,7 @@
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     <!-- 鹼基顏色圖例 (Legend) -->
-  <div id="base-legend" class="absolute top-16 left-3 sm:left-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd">
+class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
     <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1">DNA BASES</div>
     <div class="grid grid-cols-2 gap-x-3 gap-y-1">
       <div class="flex items-center space-x-1.5">
@@ -598,7 +598,7 @@
               radiusType: 'size',   // 關鍵 1：告訴 NGL 改用手動指定的固定尺寸
               radiusSize: 0.6,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
               aspectRatio: 4,    // 寬厚比調低：厚度大幅增加，輕鬆包覆短柱
-              tension: 0.15,
+              tension: 0.3,
               smoothSheet: false,   // 保留立體截面飽滿度
               subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
             });
@@ -650,9 +650,9 @@
                 const uz = dz / dist;
 
                 // 起點微縮 0.75 Å，藏在彩帶腹中
-                const startX = aBackbone.x + ux * 1.2;
-                const startY = aBackbone.y + uy * 1.2;
-                const startZ = aBackbone.z + uz * 1.2;
+                const startX = aBackbone.x + ux * 1.4;
+                const startY = aBackbone.y + uy * 1.4;
+                const startZ = aBackbone.z + uz * 1.4;
 
                 const endX = aBase.x;
                 const endY = aBase.y;
@@ -662,13 +662,6 @@
                 shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
                 shape.addSphere([endX, endY, endZ], color, stubRadius);
 
-                // 末端 fraying 支撐（補上一小段主鏈同色接頭）
-                if (stub.isTerminal) {
-                  const bbColor = [0.49, 0.83, 0.99]; // 骨架青藍色
-                  shape.addSphere([startX, startY, startZ], bbColor, stubRadius * 1.05);
-                  // 從骨架原子連回內縮起點，形成無縫小韌帶，消除騰空
-                  shape.addCylinder([aBackbone.x, aBackbone.y, aBackbone.z], [startX, startY, startZ], bbColor, 0.3);
-                }
               }
             }
           });
