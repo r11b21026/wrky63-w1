@@ -392,6 +392,13 @@
      * 動態分析結構：放寬分股閾值為 4.5 Å，防止 fraying 誤切斷彩帶
      */
     function analyzeStructureDynamically(structure) {
+      // ★ 強制計算 DSSP 二級結構，確保 beta-sheet 與 alpha-helix 能被精準辨識
+      if (structure && typeof structure.autoSecondaryStructure === 'function') {
+        structure.autoSecondaryStructure();
+      }
+
+      const nucleicResList = [];
+      let zincIdx = -1;
       const nucleicResList = [];
       let zincIdx = -1;
 
@@ -552,7 +559,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：整條連續彩帶一筆畫完，搭配正統 VMD 二級結構著色
+// 1. 蛋白質主體：AlphaFold / VMD 風格 (黃色扁平寬箭頭 Sheet + 鮮明螺旋 Helix + 細線 Loop)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
@@ -560,27 +567,25 @@
           const vmdSchemeName = 'vmd_secondary_color';
           try {
             NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
-              // 取得顏色整數：Sheet=鮮黃, Helix=洋紅紫, Loop/Turn=純白
               this.atomColor = function (atom) {
                 const ss = atom.sstruc;
                 if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
                 if (ss === 'h' || ss === 'g' || ss === 'i') return 0xA855F7; // 洋紅紫 (Alpha Helix)
-                return 0xFFFFFF; // 純白 (Loop / Turn / Coil)
+                return 0x94A3B8; // 淺灰白 (Loop / Coil / Turn，柔和不刺眼)
               };
 
-              // ★ 關鍵修復：NGL cartoon 頂點內插著色器必需的 atomColorToArray 方法
               this.atomColorToArray = function (atom, array, offset) {
                 const ss = atom.sstruc;
                 let r, g, b;
                 if (ss === 's') {
-                  // #EAB308 (RGB: 234, 179, 8)
+                  // #EAB308 鮮黃 (Sheet)
                   r = 0.918; g = 0.702; b = 0.031;
                 } else if (ss === 'h' || ss === 'g' || ss === 'i') {
-                  // #A855F7 (RGB: 168, 85, 247)
+                  // #A855F7 紫紅 (Helix)
                   r = 0.659; g = 0.333; b = 0.969;
                 } else {
-                  // #FFFFFF
-                  r = 1.0; g = 1.0; b = 1.0;
+                  // #94A3B8 淺灰白 (Loop)
+                  r = 0.580; g = 0.639; b = 0.722;
                 }
                 array[offset] = r;
                 array[offset + 1] = g;
@@ -588,37 +593,35 @@
                 return array;
               };
             });
-          } catch (e) {
-            // 已存在則忽略
-          }
+          } catch (e) {}
 
           appState.component.addRepresentation('cartoon', {
             sele: protSele,
             colorScheme: vmdSchemeName,
-            aspectRatio: 3.8,
-            scale: 0.95,
-            arrows: true,       // Beta Sheet 顯示箭頭
-            smoothSheet: true,
-            subdiv: 8
+            aspectRatio: 5.5,     // 數值調大：Sheet 與 Helix 變成寬扁箭頭/飄帶，Loop 自動收縮成細扁線
+            scale: 0.85,          // 整體收斂厚度，讓 Loop 呈現纖細線狀感
+            arrows: true,         // ★ 關鍵：Beta Sheet 端點繪製經典立體方向箭頭
+            smoothSheet: true,    // 平滑過渡
+            subdiv: 10            // 提升幾何精確度
           });
         } else {
           const pColorParams = getColorParams(appState.protColor);
           appState.component.addRepresentation('cartoon', {
             sele: protSele,
             ...pColorParams,
-            aspectRatio: 3.8,
-            scale: 0.9,
+            aspectRatio: 4.5,
+            scale: 0.85,
             arrows: true,
             smoothSheet: true,
             subdiv: 6
           });
         }
       } else if (pRep === 'tube') {
-        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#FFFFFF' } : getColorParams(appState.protColor);
+        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#94A3B8' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
-          radius: 0.28,
+          radius: 0.25,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
