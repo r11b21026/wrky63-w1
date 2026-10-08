@@ -563,8 +563,9 @@
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
               radiusType: 'size',   // 關鍵 1：告訴 NGL 改用手動指定的固定尺寸
-              radiusSize: 0.6,      // 關鍵 2：直接控制粗細半徑（預設通常只有 0.15~0.2，設成 0.5~0.7 會非常粗實）
-              smoothSheet: true,
+              radiusSize: 0.45,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
+              aspectRatio: 1.25,    // 寬厚比調低：厚度大幅增加，輕鬆包覆短柱
+              smoothSheet: false,   // 保留立體截面飽滿度
               subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
             });
           }
@@ -595,7 +596,7 @@
             return baseColorPalette[clean] || [0.8, 0.84, 0.89];
           };
 
-          const stubRadius = 0.36;
+          const stubRadius = 0.48;
 
           appState.dnaRungStubs.forEach(stub => {
             const aBackbone = structure.getAtomProxy(stub.anchor); // 骨架 P / C4'
