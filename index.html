@@ -735,15 +735,22 @@
           });
         }
       }
-      // 疊加端點微細骨架棒（平常藏在彩帶裡，fraying 時自然露出撐住末端）
-      if (appState.terminalResnoList && appState.terminalResnoList.length > 0) {
-        appState.component.addRepresentation('licorice', {
-          sele: `(${appState.terminalResnoList.join(' or ')}) and nucleic and backbone`,
-          ...dColorParams,
-          radius: 0.16,
-          multipleBond: 'off'
-        });
-      }
+          // 繪製圓柱本體
+          shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
+          shape.addSphere([endX, endY, endZ], color, stubRadius);
+
+          // ★ 動態適應 fraying：若是末端殘基，補上與彩帶主鏈顏色相同的銜接段
+          if (stub.isTerminal) {
+            // 取湖水藍骨架色 (RGB: 0.49, 0.83, 0.99，對應 #7dd3fc)
+            const bbColor = [0.49, 0.83, 0.99];
+            // 在起點補上一個骨架銜接圓帽，消除末端突然斷開的稜角
+            shape.addSphere([startX, startY, startZ], bbColor, stubRadius * 1.05);
+
+            // 若有骨架 P 原子，補一小段同色彩帶牽引棒，保證解離時連著主鏈
+            if (stub.p) {
+              shape.addCylinder([stub.p.x, stub.p.y, stub.p.z], [startX, startY, startZ], bbColor, 0.28);
+            }
+          }
     }
 
     function toggleFocusInterface() {
