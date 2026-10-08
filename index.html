@@ -388,23 +388,57 @@
     }
 
 /**
-     * 動態分析結構：通用主鏈二面角演算法，解決 CYM/HIE 或 MD 結構缺乏 DSSP 的問題
+     * 自備向量二面角計算函式 (度數 -180 ~ +180)，不依賴 NGL 內部 API
+     */
+    function calculateDihedralAngle(p1, p2, p3, p4) {
+      // 向量 b1, b2, b3
+      const b1 = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
+      const b2 = { x: p3.x - p2.x, y: p3.y - p2.y, z: p3.z - p2.z };
+      const b3 = { x: p4.x - p3.x, y: p4.y - p3.y, z: p4.z - p3.z };
+
+      // 外積 n1 = b1 x b2, n2 = b2 x b3
+      const n1 = {
+        x: b1.y * b2.z - b1.z * b2.y,
+        y: b1.z * b2.x - b1.x * b2.z,
+        z: b1.x * b2.y - b1.y * b2.x
+      };
+      const n2 = {
+        x: b2.y * b3.z - b2.z * b3.y,
+        y: b2.z * b3.x - b2.x * b3.z,
+        z: b2.x * b3.y - b2.y * b3.x
+      };
+
+      // m1 = n1 x (b2 / |b2|)
+      const lenB2 = Math.sqrt(b2.x * b2.x + b2.y * b2.y + b2.z * b2.z);
+      if (lenB2 < 1e-6) return 0;
+      const b2u = { x: b2.x / lenB2, y: b2.y / lenB2, z: b2.z / lenB2 };
+      const m1 = {
+        x: n1.y * b2u.z - n1.z * b2u.y,
+        y: n1.z * b2u.x - n1.x * b2u.z,
+        z: n1.x * b2u.y - n1.y * b2u.x
+      };
+
+      const x = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+      const y = m1.x * n2.x + m1.y * n2.y + m1.z * n2.z;
+      return Math.atan2(y, x) * (180 / Math.PI);
+    }
+
+    /**
+     * 動態分析結構：通用主鏈二面角分析
      */
     function analyzeStructureDynamically(structure) {
-      // 1. 通用物理判定：依據主鏈 Phi/Psi 動態賦予二級結構 (不綁死 Residue，任何蛋白通用)
+      // 1. 通用物理判定：遍歷多肽殘基，依據 Phi/Psi 標註二級結構
       structure.eachPolymer(polymer => {
         if (!polymer.isProtein()) return;
 
         const residues = [];
         polymer.eachResidue(r => residues.push(r));
 
-        // 計算每個殘基的 Phi/Psi 並標記
         for (let i = 1; i < residues.length - 1; i++) {
           const prev = residues[i - 1];
           const curr = residues[i];
           const next = residues[i + 1];
 
-          // 抓取骨架原子: prev(C) -> curr(N) -> curr(CA) -> curr(C) -> next(N)
           let cPrev = null, nCurr = null, caCurr = null, cCurr = null, nNext = null;
 
           prev.eachAtom(a => { if (a.atomname === 'C') cPrev = a; });
@@ -416,14 +450,13 @@
           next.eachAtom(a => { if (a.atomname === 'N') nNext = a; });
 
           if (cPrev && nCurr && caCurr && cCurr && nNext) {
-            // 計算二面角 (度數)
-            const phi = NGL.calcDihedral(cPrev, nCurr, caCurr, cCurr);
-            const psi = NGL.calcDihedral(nCurr, caCurr, cCurr, nNext);
+            const phi = calculateDihedralAngle(cPrev, nCurr, caCurr, cCurr);
+            const psi = calculateDihedralAngle(nCurr, caCurr, cCurr, nNext);
 
-            // 標準 Beta-Sheet 區域: phi 落在 [-180, -60]，psi 落在 [80, 180] 或 [-180, -160]
-            const isBeta = (phi >= -180 && phi <= -60) && ((psi >= 80 && psi <= 180) || (psi >= -180 && psi <= -160));
-            // 標準 Alpha-Helix 區域: phi 落在 [-110, -35]，psi 落在 [-75, -10]
-            const isHelix = (phi >= -110 && phi <= -35) && (psi >= -75 && psi <= -10);
+            // 標準 Beta-Sheet 伸展構型區間 (拉氏圖左上角)
+            const isBeta = (phi >= -180 && phi <= -50) && ((psi >= 70 && psi <= 180) || (psi >= -180 && psi <= -160));
+            // 標準 Alpha-Helix 區間
+            const isHelix = (phi >= -120 && phi <= -30) && (psi >= -80 && psi <= -5);
 
             if (isBeta) {
               curr.sstruc = 's';
@@ -435,13 +468,13 @@
           }
         }
 
-        // 平滑過濾：連續 2 個殘基以上的 's' 才是穩定 Beta-sheet，孤立單點視為 loop
+        // 平滑過濾：連續 2 個殘基以上才構成穩定 Beta-strand
         for (let i = 1; i < residues.length - 1; i++) {
           if (residues[i].sstruc === 's') {
             const hasNeighbor = (residues[i - 1].sstruc === 's' || residues[i + 1].sstruc === 's');
             if (!hasNeighbor) residues[i].sstruc = 'c';
           }
-          // 將所有 atom 的 sstruc 同步為 residue 的 sstruc
+          // 同步給殘基內所有原子
           residues[i].eachAtom(a => { a.sstruc = residues[i].sstruc; });
         }
       });
@@ -604,57 +637,47 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：正統 PyMOL 視覺效果 (自動動態識別 Sheet 與 Loop)
+// 1. 蛋白質主體：整條單一連續彩帶（絕不切斷斷裂），搭配自訂二級結構著色
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
-        if (appState.protColor === 'sstruc') {
-          // 1-1. 真正的 Beta Sheet (寬扁刀刃狀 + 明確立體箭頭來回)
-          appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and (sheet or sstruc s)`,
-            color: '#EAB308',     // 鮮黃色 (Beta Sheet)
-            aspectRatio: 6.8,     // ★ 極寬扁平，呈現 PyMOL 刀刃質感
-            scale: 1.15,
-            arrows: true,         // ★ 箭頭開啟
-            arrowSize: 2.2,       // ★ 放大箭頭倒角
-            smoothSheet: true,
-            subdiv: 10
+        const vmdSchemeName = 'vmd_secondary_color';
+        try {
+          NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
+            this.atomColor = function (atom) {
+              const ss = atom.sstruc;
+              if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
+              if (ss === 'h') return 0xEF4444; // 鮮紅色 (Alpha Helix)
+              return 0x38BDF8;                // 經典青藍色 (Loop / Coil)
+            };
+            this.atomColorToArray = function (atom, array, offset) {
+              const ss = atom.sstruc;
+              if (ss === 's') {
+                array[offset] = 0.918; array[offset + 1] = 0.702; array[offset + 2] = 0.031; // 黃
+              } else if (ss === 'h') {
+                array[offset] = 0.937; array[offset + 1] = 0.267; array[offset + 2] = 0.267; // 紅
+              } else {
+                array[offset] = 0.220; array[offset + 1] = 0.741; array[offset + 2] = 0.973; // 青藍
+              }
+              return array;
+            };
           });
+        } catch (e) {}
 
-          // 1-2. Alpha Helix (螺旋筒)
-          appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and (helix or sstruc h)`,
-            color: '#EF4444',     // 鮮紅色 (Helix)
-            aspectRatio: 2.2,
-            scale: 0.95,
-            smoothSheet: true,
-            subdiv: 8
-          });
+        const colorCfg = (appState.protColor === 'sstruc') 
+          ? { colorScheme: vmdSchemeName } 
+          : getColorParams(appState.protColor);
 
-          // 1-3. 連接的 Loop / Coil (細緻青藍色圓繩，絕不染黃)
-          appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and not ((sheet or sstruc s) or (helix or sstruc h))`,
-            color: '#38BDF8',     // 經典青藍色 (Cyan)
-            aspectRatio: 1.2,     // 圓滑細繩
-            scale: 0.35,          // ★ 縮得非常細，與寬扁 Sheet 形成鮮明反差
-            smoothSheet: true,
-            subdiv: 6
-          });
-
-        } else {
-          // 一般自訂單色模式
-          const pColorParams = getColorParams(appState.protColor);
-          appState.component.addRepresentation('cartoon', {
-            sele: protSele,
-            ...pColorParams,
-            aspectRatio: 5.5,
-            scale: 1.0,
-            arrows: true,
-            arrowSize: 1.8,
-            smoothSheet: true,
-            subdiv: 8
-          });
-        }
+        appState.component.addRepresentation('cartoon', {
+          sele: protSele,
+          ...colorCfg,
+          aspectRatio: 6.5,     // 寬度拉大：Beta-sheet 呈現厚刃感，Loop 自然壓成細線
+          scale: 1.05,
+          arrows: true,         // Sheet 端點產生方向箭頭
+          arrowSize: 2.0,       // 放大箭頭錐體
+          smoothSheet: true,
+          subdiv: 10
+        });
       } else if (pRep === 'tube') {
         const pColorParams = (appState.protColor === 'sstruc') ? { color: '#38BDF8' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
