@@ -557,26 +557,61 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：極致優化原生二級結構 (超寬立體 Beta-Sheet 箭頭 + 抑制 Loop 亂黃)
+// 1. 蛋白質主體：徹底修正二級結構誤判 (超寬箭頭 Sheet + 專屬青色 Loop)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
-      const pColorParams = getColorParams(appState.protColor);
 
       if (pRep === 'newcartoon') {
-        // ★ 核心優化：
-        // 1. aspectRatio 調高至 7.5 ~ 8.0：Beta-Sheet 寬度大幅擴張，展現如 PyMOL 般的飽滿厚刃感！
-        // 2. 由於寬高比被大幅拉開，非 Sheet 區域 (Loop/Turn) 會被自動緊縮成細薄的流線，不會有一大片泛黃的雜亂感
-        // 3. arrows: true 搭配 arrowSize: 1.8，使片層末端的箭頭巨大化、立體可辨
-        appState.component.addRepresentation('cartoon', {
-          sele: protSele,
-          ...pColorParams,
-          aspectRatio: 7.5,     // 數值極致拉大：Sheet 變得極寬，Loop/Turn 被壓縮收細
-          scale: 1.1,           // 寬度比例飽滿
-          arrows: true,         // ★ 啟用方向箭頭
-          arrowSize: 1.8,       // ★ 大幅放大箭頭倒角，確保一眼看到明確的箭頭來回
-          smoothSheet: true,    // Sheet 表面刀刃般平整
-          subdiv: 12            // 採樣精準，折角分明
-        });
+        if (appState.protColor === 'sstruc') {
+          // 1-1. 真正的 Beta Sheet (只給嚴格的 sheet，排除被誤判為黃色的 turn)
+          // 具備超寬扁平 + 銳利的方向大箭頭
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and sheet`,
+            color: '#EAB308',     // 鮮黃色 (Beta Sheet)
+            aspectRatio: 6.5,     // ★ 數值拉大：Sheet 變得極寬，像刀刃一樣厚實
+            scale: 1.15,
+            arrows: true,         // ★ 嚴格在 Sheet 端點繪製箭頭
+            arrowSize: 2.2,       // ★ 大幅放大箭頭倒角，保證清晰看見箭頭來回
+            smoothSheet: true,
+            subdiv: 12
+          });
+
+          // 1-2. Alpha Helix (螺旋筒)
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and helix`,
+            color: '#EF4444',     // 經典鮮紅色 (Alpha Helix)
+            aspectRatio: 2.2,
+            scale: 0.95,
+            smoothSheet: true,
+            subdiv: 8
+          });
+
+          // 1-3. 所有的 Loop / Turn / Coil (徹底修正長 Loop 被染黃的 Bug)
+          // 一律呈現青藍色細繩狀，不再有零碎的黃色雜質
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and not (sheet or helix)`,
+            color: '#38BDF8',     // ★ 經典青藍色 (Cyan)，清晰易辨不泛白
+            aspectRatio: 1.2,     // 接近圓形細繩
+            scale: 0.35,          // ★ 縮得非常細，與寬扁 Sheet 形成鮮明對比
+            smoothSheet: true,
+            subdiv: 6
+          });
+
+        } else {
+          // 一般自訂單色模式
+          const pColorParams = getColorParams(appState.protColor);
+          appState.component.addRepresentation('cartoon', {
+            sele: protSele,
+            ...pColorParams,
+            aspectRatio: 5.5,
+            scale: 1.0,
+            arrows: true,
+            arrowSize: 1.8,
+            smoothSheet: true,
+            subdiv: 8
+          });
+        }
       } else if (pRep === 'tube') {
+        const pColorParams = (appState.protColor === 'sstruc') ? { color: '#38BDF8' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
@@ -584,6 +619,7 @@
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
+        const pColorParams = (appState.protColor === 'sstruc') ? { colorScheme: 'element' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('licorice', {
           sele: protSele,
           ...pColorParams,
