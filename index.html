@@ -153,7 +153,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="sstruc">預設二級結構 (紅Helix/黃Sheet/青Loop)</option>
+            <option value="sstruc" selected>二級結構 (黃Sheet/紅Helix/青Loop)</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
@@ -260,7 +260,7 @@
       timerId: null,
       fps: 20,
       protStyle: 'newcartoon',
-      protColor: 'sstruc', // 預設使用正統 VMD 二級結構配色 (黃色 sheet / 白色 loop)
+      protColor: 'sstruc',
       dnaStyle: 'vmd_ladder',
       dnaColor: '#7dd3fc',
       showBaseLabels: false,
@@ -268,6 +268,8 @@
       dnaStrandSelections: [],
       dnaRungStubs: [],
       ladderShapeComp: null,
+      customSheetSele: 'none',
+      customHelixSele: 'none',
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
@@ -353,7 +355,7 @@
       }
 
       if (found.length === 0) {
-        const candidates = ['complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
+        const candidates = ['complex_cleaned_db.pdb', 'complex_db_dry.pdb', 'traj_light.pdb', 'trajectory.pdb', 'model.pdb', 'complex.pdb'];
         const checks = candidates.map(async (filename) => {
           try {
             const r = await fetch(filename, { method: 'HEAD', cache: 'no-cache' });
@@ -387,7 +389,7 @@
       return { colorScheme: colorVal };
     }
 
-/**
+    /**
      * 自備向量二面角計算函式 (度數 -180 ~ +180)
      */
     function calculateDihedralAngle(p1, p2, p3, p4) {
@@ -421,11 +423,11 @@
     }
 
     /**
-     * 動態分析結構：強制將二面角結構注入 NGL 底層緩衝區
+     * 動態分析結構：透過主鏈二面角動態產出二級結構範圍 (完全通用任何 PDB/軌跡檔)
      */
     function analyzeStructureDynamically(structure) {
-      // 1. 通用物理判定：動態覆寫 NGL 結構底層二級結構陣列
-      const sstrucArray = structure.sstruc; // NGL 內部的 Uint8Array / Int8Array
+      const sheetResnos = [];
+      const helixResnos = [];
 
       structure.eachPolymer(polymer => {
         if (!polymer.isProtein()) return;
@@ -433,7 +435,7 @@
         const residues = [];
         polymer.eachResidue(r => residues.push(r));
 
-        const detectedSS = new Array(residues.length).fill('c');
+        const tempSS = new Array(residues.length).fill('c');
 
         for (let i = 1; i < residues.length - 1; i++) {
           const prev = residues[i - 1];
@@ -454,45 +456,36 @@
             const phi = calculateDihedralAngle(cPrev, nCurr, caCurr, cCurr);
             const psi = calculateDihedralAngle(nCurr, caCurr, cCurr, nNext);
 
-            // 標準 Beta-Sheet 伸展構型區間 (拉氏圖左上方)
+            // 拉氏圖 Beta-Sheet 伸展構型區間 (容許 MD 熱震盪)
             const isBeta = (phi >= -180 && phi <= -45) && ((psi >= 60 && psi <= 180) || (psi >= -180 && psi <= -150));
-            // 標準 Alpha-Helix 區間
+            // 拉氏圖 Alpha-Helix 區間
             const isHelix = (phi >= -120 && phi <= -30) && (psi >= -80 && psi <= -5);
 
-            if (isBeta) detectedSS[i] = 's';
-            else if (isHelix) detectedSS[i] = 'h';
+            if (isBeta) tempSS[i] = 's';
+            else if (isHelix) tempSS[i] = 'h';
           }
         }
 
-        // 平滑過濾：連續 2 個殘基以上才構成穩定 Beta-strand
+        // 平滑過濾：連續 2 個殘基以上方視為穩定片層
         for (let i = 1; i < residues.length - 1; i++) {
-          if (detectedSS[i] === 's') {
-            const hasNeighbor = (detectedSS[i - 1] === 's' || detectedSS[i + 1] === 's');
-            if (!hasNeighbor) detectedSS[i] = 'c';
-          }
-        }
-
-        // ★ 核心修復：把字符代碼寫入 NGL 底層結構二級結構陣列 ('s' -> 115, 'h' -> 104, 'c' -> 99)
-        for (let i = 0; i < residues.length; i++) {
-          const ssChar = detectedSS[i];
-          const ssCode = ssChar.charCodeAt(0);
-          const res = residues[i];
-
-          // 覆寫 residueStore 與 atomStore
-          if (structure.residueStore && structure.residueStore.sstruc) {
-            structure.residueStore.sstruc[res.index] = ssCode;
-          }
-          if (sstrucArray) {
-            sstrucArray[res.index] = ssCode;
-          }
-          res.eachAtom(a => {
-            if (structure.atomStore && structure.atomStore.sstruc) {
-              structure.atomStore.sstruc[a.index] = ssCode;
+          if (tempSS[i] === 's') {
+            const hasNeighbor = (tempSS[i - 1] === 's' || tempSS[i + 1] === 's');
+            if (hasNeighbor) {
+              sheetResnos.push(residues[i].resno);
             }
-          });
+          } else if (tempSS[i] === 'h') {
+            const hasNeighbor = (tempSS[i - 1] === 'h' || tempSS[i + 1] === 'h');
+            if (hasNeighbor) {
+              helixResnos.push(residues[i].resno);
+            }
+          }
         }
       });
-      
+
+      // 保存動態計算產生的選取字串
+      appState.customSheetSele = sheetResnos.length > 0 ? sheetResnos.join(' or ') : 'none';
+      appState.customHelixSele = helixResnos.length > 0 ? helixResnos.join(' or ') : 'none';
+
       const nucleicResList = [];
       let zincIdx = -1;
 
@@ -651,47 +644,68 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：PyMOL 經典 NewCartoon (由底層注入的二級結構直接驅動幾何箭頭)
+      // 1. 蛋白質主體：正統 PyMOL 風格 (由通用二面角判定驅動超寬大箭頭 + 青藍細繩 Loop)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
-        const vmdSchemeName = 'vmd_secondary_color';
-        try {
-          NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
-            this.atomColor = function (atom) {
-              const ss = atom.sstruc;
-              if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
-              if (ss === 'h') return 0xEF4444; // 鮮紅色 (Alpha Helix)
-              return 0x38BDF8;                // 經典青藍色 (Loop / Coil)
-            };
-            this.atomColorToArray = function (atom, array, offset) {
-              const ss = atom.sstruc;
-              if (ss === 's') {
-                array[offset] = 0.918; array[offset + 1] = 0.702; array[offset + 2] = 0.031; // 黃
-              } else if (ss === 'h') {
-                array[offset] = 0.937; array[offset + 1] = 0.267; array[offset + 2] = 0.267; // 紅
-              } else {
-                array[offset] = 0.220; array[offset + 1] = 0.741; array[offset + 2] = 0.973; // 青藍
-              }
-              return array;
-            };
+        const sSele = appState.customSheetSele || 'none';
+        const hSele = appState.customHelixSele || 'none';
+
+        if (appState.protColor === 'sstruc') {
+          // 1-1. 實體 Beta Sheet：鮮黃色超寬扁平 + 實體雙向大箭頭
+          if (sSele !== 'none') {
+            appState.component.addRepresentation('cartoon', {
+              sele: `${protSele} and (${sSele})`,
+              color: '#EAB308',     // 鮮黃色 (Beta Sheet)
+              aspectRatio: 6.8,     // 寬度大幅擴張
+              scale: 1.15,
+              arrows: true,         // ★ 雙向立體方向箭頭
+              arrowSize: 2.4,       // 放大箭頭錐體
+              smoothSheet: true,
+              subdiv: 10
+            });
+          }
+
+          // 1-2. Alpha Helix (鮮紅色)
+          if (hSele !== 'none') {
+            appState.component.addRepresentation('cartoon', {
+              sele: `${protSele} and (${hSele}) and not (${sSele})`,
+              color: '#EF4444',
+              aspectRatio: 2.2,
+              scale: 0.95,
+              smoothSheet: true,
+              subdiv: 8
+            });
+          }
+
+          // 1-3. 連接的 Loop / Coil：收縮為青藍色細緻圓繩 (絕不變黃)
+          const nonSheetHelixSele = (sSele !== 'none' || hSele !== 'none')
+            ? `and not (${sSele !== 'none' ? sSele : 'none'} or ${hSele !== 'none' ? hSele : 'none'})`
+            : '';
+
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} ${nonSheetHelixSele}`,
+            color: '#38BDF8',     // 經典青藍色 (Cyan)
+            aspectRatio: 1.2,     // 圓滑細繩
+            scale: 0.35,          // 纖細化
+            smoothSheet: true,
+            subdiv: 6
           });
-        } catch (e) {}
 
-        const colorCfg = (appState.protColor === 'sstruc') 
-          ? { colorScheme: vmdSchemeName } 
-          : getColorParams(appState.protColor);
-
-        appState.component.addRepresentation('cartoon', {
-          sele: protSele,
-          ...colorCfg,
-          aspectRatio: 6.5,     // ★ 數值拉大：Beta-Sheet 大幅展寬，呈現 PyMOL 厚刃感
-          scale: 1.1,           // 寬度飽滿
-          arrows: true,         // ★ 關鍵：NGL 會在辨識到的 Sheet 末端自動繪製立體箭頭！
-          arrowSize: 2.2,       // ★ 大幅放大箭頭倒角，確保箭頭極其醒目
-          smoothSheet: true,
-          subdiv: 12
-        });
+        } else {
+          // 自訂單色模式
+          const pColorParams = getColorParams(appState.protColor);
+          appState.component.addRepresentation('cartoon', {
+            sele: protSele,
+            ...pColorParams,
+            aspectRatio: 5.5,
+            scale: 1.0,
+            arrows: true,
+            arrowSize: 1.8,
+            smoothSheet: true,
+            subdiv: 8
+          });
+        }
       } else if (pRep === 'tube') {
         const pColorParams = (appState.protColor === 'sstruc') ? { color: '#38BDF8' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
@@ -965,6 +979,9 @@
       lucide.createIcons();
     }
 
+    /**
+     * 載入 PDB 檔案 (修復非標準殘基命名並重新整理二級結構)
+     */
     async function loadPdbFile(url) {
       if (appState.isLoadingFile) return;
       appState.isLoadingFile = true;
@@ -982,6 +999,18 @@
           asTrajectory: true
         });
         appState.component = comp;
+
+        // ★ 核心修復：修正 Amber/MD 非標準殘基（CYM/HIE），使 NGL 納入正規胜肽骨架計算
+        comp.structure.eachResidue(r => {
+          const rn = (r.resname || '').trim().toUpperCase();
+          if (rn === 'CYM') r.resname = 'CYS';
+          if (rn === 'HIE' || rn === 'HID' || rn === 'HIP') r.resname = 'HIS';
+        });
+
+        // 強制 NGL 核心重新執行二級結構辨識
+        if (typeof comp.structure.autoSecondaryStructure === 'function') {
+          comp.structure.autoSecondaryStructure();
+        }
 
         try {
           analyzeStructureDynamically(comp.structure);
