@@ -64,28 +64,31 @@
 
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-    <!-- 鹼基顏色圖例 (Legend) -->
-<div id="base-legend" class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
-    <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1">DNA BASES</div>
-    <div class="grid grid-cols-2 gap-x-3 gap-y-1">
-      <div class="flex items-center space-x-1.5">
-        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #3859F2;"></span>
-        <span class="text-slate-200">A <span class="text-[10px] text-slate-400">(Ade)</span></span>
+    
+    <!-- 鹼基顏色圖例 (Legend: 右上角，手機端不擋左側標題) -->
+    <div id="base-legend" class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
+      <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1 flex items-center justify-between">
+        <span>DNA BASES (VMD)</span>
       </div>
-      <div class="flex items-center space-x-1.5">
-        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #EB4759;"></span>
-        <span class="text-slate-200">T <span class="text-[10px] text-slate-400">(Thy)</span></span>
-      </div>
-      <div class="flex items-center space-x-1.5">
-        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #F29433;"></span>
-        <span class="text-slate-200">C <span class="text-[10px] text-slate-400">(Cyt)</span></span>
-      </div>
-      <div class="flex items-center space-x-1.5">
-        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #26CC40;"></span>
-        <span class="text-slate-200">G <span class="text-[10px] text-slate-400">(Gua)</span></span>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #3859F2;"></span>
+          <span class="text-slate-200">A <span class="text-[10px] text-slate-400">(Ade)</span></span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #EB4759;"></span>
+          <span class="text-slate-200">T <span class="text-[10px] text-slate-400">(Thy)</span></span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #F29433;"></span>
+          <span class="text-slate-200">C <span class="text-[10px] text-slate-400">(Cyt)</span></span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #26CC40;"></span>
+          <span class="text-slate-200">G <span class="text-[10px] text-slate-400">(Gua)</span></span>
+        </div>
       </div>
     </div>
-  </div>
     
     <!-- 左側：標題與結構選單 -->
     <div class="vmd-panel rounded-xl px-3 py-2 flex items-center space-x-2.5 pointer-events-auto shadow-lg max-w-full">
@@ -150,7 +153,8 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="sstruc" selected>二級結構 (紅/黃/青)</option>
+            <option value="vmd_sstruc" selected>VMD 二級結構 (黃Sheet/白Loop)</option>
+            <option value="sstruc">預設二級結構</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
@@ -257,7 +261,7 @@
       timerId: null,
       fps: 20,
       protStyle: 'newcartoon',
-      protColor: 'sstruc',
+      protColor: 'vmd_sstruc', // 預設使用正統 VMD 二級結構配色 (黃色 sheet / 白色 loop)
       dnaStyle: 'vmd_ladder',
       dnaColor: '#7dd3fc',
       showBaseLabels: false,
@@ -384,8 +388,8 @@
       return { colorScheme: colorVal };
     }
 
-/**
-     * 動態分析結構：短柱起點改抓核糖內側 C1'，終點取鹼基芳香環中心原子
+    /**
+     * 動態分析結構：放寬分股閾值為 4.5 Å，防止 fraying 誤切斷彩帶
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -425,7 +429,6 @@
             }
           });
 
-          // 保底
           if (!backboneAtom) {
             r.eachAtom(a => { if (!backboneAtom) backboneAtom = a.index; });
           }
@@ -438,8 +441,8 @@
             chain: (r.chainname || 'A').trim(),
             resname: rname,
             o3: o3, p: p,
-            c1Index: backboneAtom, // 起點存入骨架原子
-            ringIndex: baseRing    // 終點存入鹼基核心
+            c1Index: backboneAtom,
+            ringIndex: baseRing
           });
         }
       });
@@ -452,7 +455,7 @@
         return;
       }
 
-      // 依據前後殘基 O3' 到 P 的距離切斷股
+      // 依據前後殘基 O3' 到 P 的距離切斷股（放寬為 4.5 Å 確保末端完整）
       const strandGroups = [];
       let curGroup = [nucleicResList[0]];
 
@@ -468,7 +471,7 @@
           dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        if (dist > 3.0 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
+        if (dist > 4.5 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
           strandGroups.push(curGroup);
           curGroup = [r2];
         } else {
@@ -484,22 +487,12 @@
         return `(${minR}-${maxR} and not protein and not hydrogen)`;
       });
 
-      // ★ 標記每股的端點殘基 (5' 端與 3' 端) —— 在 strandGroups 產生後才標記
-      const terminalResnoSet = new Set();
-      strandGroups.forEach(grp => {
-        if (grp.length > 0) {
-          terminalResnoSet.add(grp[0].resno);
-          terminalResnoSet.add(grp[grp.length - 1].resno);
-        }
-      });
-
       // 產生短柱資料
       appState.dnaRungStubs = nucleicResList.map(item => ({
         anchor: item.c1Index,
         target: item.ringIndex,
         resname: item.resname,
-        resno: item.resno,
-        isTerminal: terminalResnoSet.has(item.resno)
+        resno: item.resno
       }));
 
       // 結合口袋計算 (3.5 Å 空間接觸)
@@ -549,37 +542,71 @@
       if (!appState.component) return;
       appState.component.removeAllRepresentations();
 
-      // 清除舊幾何形狀
+      // 清除舊階梯短柱形狀
       if (appState.ladderShapeComp) {
         appState.stage.removeComponent(appState.ladderShapeComp);
         appState.ladderShapeComp = null;
       }
 
       const pRep = appState.protStyle;
-      const pColorParams = getColorParams(appState.protColor);
-
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體
+      // 1. 蛋白質主體：正統 VMD NewCartoon 視覺配置 (鮮黃 Sheet 箭頭 / 白色 Loop 繩狀)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
+
       if (pRep === 'newcartoon') {
-        appState.component.addRepresentation('cartoon', {
-          sele: protSele,
-          ...pColorParams,
-          aspectRatio: 3.8,
-          scale: 0.9,
-          smoothSheet: true,
-          subdiv: 6
-        });
+        if (appState.protColor === 'vmd_sstruc') {
+          // 1-1. Beta Sheet 寬扁立體箭頭 (鮮黃色 #EAB308)
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and sheet`,
+            color: '#EAB308',
+            aspectRatio: 4.8,
+            scale: 1.15,
+            arrows: true,
+            smoothSheet: true,
+            subdiv: 8
+          });
+
+          // 1-2. Alpha Helix 螺旋筒 (洋紅紫 #A855F7)
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and helix`,
+            color: '#A855F7',
+            aspectRatio: 2.2,
+            scale: 0.95,
+            smoothSheet: true,
+            subdiv: 8
+          });
+
+          // 1-3. Loop / Turn / Coil 柔性繩狀 (純白 #FFFFFF)
+          appState.component.addRepresentation('tube', {
+            sele: `${protSele} and not (sheet or helix)`,
+            color: '#FFFFFF',
+            radius: 0.18,
+            subdiv: 6
+          });
+        } else {
+          const pColorParams = getColorParams(appState.protColor);
+          appState.component.addRepresentation('cartoon', {
+            sele: protSele,
+            ...pColorParams,
+            aspectRatio: 3.8,
+            scale: 0.9,
+            arrows: true,
+            smoothSheet: true,
+            subdiv: 6
+          });
+        }
       } else if (pRep === 'tube') {
+        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#FFFFFF' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
-          radius: 0.32,
+          radius: 0.28,
           subdiv: 6
         });
       } else if (pRep === 'licorice') {
+        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { colorScheme: 'element' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('licorice', {
           sele: protSele,
           ...pColorParams,
@@ -588,25 +615,25 @@
         });
       }
 
-      // 2. DNA 雙螺旋絲帶（加厚彩帶，包覆骨架短柱，避免穿刺與薄膜感）
+      // 2. DNA 雙螺旋絲帶
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
             appState.component.addRepresentation('cartoon', {
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
-              radiusType: 'size',   // 關鍵 1：告訴 NGL 改用手動指定的固定尺寸
-              radiusSize: 0.6,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
-              aspectRatio: 4,    // 寬厚比調低：厚度大幅增加，輕鬆包覆短柱
-              tension: 0.3,
-              smoothSheet: false,   // 保留立體截面飽滿度
-              subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
+              radiusType: 'size',
+              radiusSize: 0.42,
+              aspectRatio: 3.2,
+              tension: 0.15,
+              smoothSheet: false,
+              subdiv: 12
             });
           }
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD 經典短柱 + 末端 fraying 動態防騰空)
+      // 3. DNA 階梯橫竿 (VMD 圓頭短柱)
       if (dRep === 'vmd_ladder') {
         if (appState.ladderShapeComp) {
           appState.stage.removeComponent(appState.ladderShapeComp);
@@ -618,10 +645,10 @@
           const structure = appState.component.structure;
 
           const baseColorPalette = {
-            'A': [0.22, 0.35, 0.95],
-            'T': [0.92, 0.28, 0.35],
-            'C': [0.95, 0.58, 0.20],
-            'G': [0.15, 0.80, 0.25],
+            'A': [0.22, 0.35, 0.95], // 鮮藍
+            'T': [0.92, 0.28, 0.35], // 鮮紅
+            'C': [0.95, 0.58, 0.20], // 暖橘
+            'G': [0.15, 0.80, 0.25], // 鮮綠
             'U': [0.92, 0.28, 0.35]
           };
 
@@ -630,7 +657,7 @@
             return baseColorPalette[clean] || [0.8, 0.84, 0.89];
           };
 
-          const stubRadius = 0.48;
+          const stubRadius = 0.46;
 
           appState.dnaRungStubs.forEach(stub => {
             const aBackbone = structure.getAtomProxy(stub.anchor);
@@ -649,19 +676,17 @@
                 const uy = dy / dist;
                 const uz = dz / dist;
 
-                // 起點微縮 0.75 Å，藏在彩帶腹中
-                const startX = aBackbone.x + ux * 1.4;
-                const startY = aBackbone.y + uy * 1.4;
-                const startZ = aBackbone.z + uz * 1.4;
+                // 起點微縮 0.85 Å，穩固嵌在彩帶厚度腹中，背面不突起
+                const startX = aBackbone.x + ux * 0.85;
+                const startY = aBackbone.y + uy * 0.85;
+                const startZ = aBackbone.z + uz * 0.85;
 
                 const endX = aBase.x;
                 const endY = aBase.y;
                 const endZ = aBase.z;
 
-                // 柱身與端點球
                 shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
                 shape.addSphere([endX, endY, endZ], color, stubRadius);
-
               }
             }
           });
@@ -724,6 +749,16 @@
           });
         }
       }
+
+      // 圖例顯示與隱藏連動
+      const legendEl = document.getElementById('base-legend');
+      if (legendEl) {
+        if (dRep === 'vmd_ladder') {
+          legendEl.classList.remove('hidden');
+        } else {
+          legendEl.classList.add('hidden');
+        }
+      }
     }
 
     function toggleFocusInterface() {
@@ -765,7 +800,6 @@
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
 
-      // 動畫切換影格時同步更新短柱
       if (appState.dnaStyle === 'vmd_ladder') {
         applyAllRepresentations();
       }
@@ -836,9 +870,6 @@
       lucide.createIcons();
     }
 
-    /**
-     * 載入 PDB 檔案 (帶防頻繁重整鎖定機制)
-     */
     async function loadPdbFile(url) {
       if (appState.isLoadingFile) return;
       appState.isLoadingFile = true;
@@ -970,11 +1001,25 @@
 
       dom.btnFocusInterface.addEventListener('click', toggleFocusInterface);
 
+      // 樣式面板與圖例連動（開啟面板時暫時隱藏右上角圖例，避免重疊）
       dom.btnToggleRep.addEventListener('click', () => {
         dom.repModal.classList.toggle('hidden');
+        const legend = document.getElementById('base-legend');
+        if (legend && appState.dnaStyle === 'vmd_ladder') {
+          if (!dom.repModal.classList.contains('hidden')) {
+            legend.classList.add('hidden');
+          } else {
+            legend.classList.remove('hidden');
+          }
+        }
       });
+
       dom.btnCloseRep.addEventListener('click', () => {
         dom.repModal.classList.add('hidden');
+        const legend = document.getElementById('base-legend');
+        if (legend && appState.dnaStyle === 'vmd_ladder') {
+          legend.classList.remove('hidden');
+        }
       });
 
       dom.proteinStyleSelect.addEventListener('change', (e) => {
