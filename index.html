@@ -386,7 +386,7 @@
             if (aname === "P") p = { x: a.x, y: a.y, z: a.z };
 
             // 1. 骨架起點：嚴格取核糖內側 C1'，保證從骨架內緣發出，絕不穿透外部彩帶
-            if (aname === "P") {
+            if (aname === "C1'" || aname === "C1*") {
               anchorC1 = a.index;
             }
 
@@ -566,59 +566,27 @@
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD 原生膠囊短柱：從 C1' 出發不刺穿骨架，端點圓弧閉合)
-    if (dRep === 'vmd_ladder') {
-    if (appState.ladderShapeComp) {
-      appState.stage.removeComponent(appState.ladderShapeComp);
-      appState.ladderShapeComp = null;
-    }
-
-    // 安全註冊配色（若尚未註冊才註冊，避免重複註冊報錯）
-    try {
-      if (!NGL.ColormakerRegistry.has('vmdBaseScheme')) {
-        NGL.ColormakerRegistry.addSelectionColorMaker('vmdBaseScheme', [
-          [ "#3859F2", "DA or A or :A" ],
-          [ "#EB4759", "DT or T or U or :T or :U" ],
-          [ "#F29433", "DC or C or :C" ],
-          [ "#26CC40", "DG or G or :G" ],
-          [ "#94a3b8", "*" ]
-        ]);
-      }
-    } catch (e) {
-      console.warn("ColorMaker 註冊警告:", e);
-    }
-
-    // 掛上 NGL 原生 base representation
-    appState.component.addRepresentation('base', {
-      sele: 'nucleic and not protein',
-      colorScheme: NGL.ColormakerRegistry.has('vmdBaseScheme') ? 'vmdBaseScheme' : 'resname',
-      radius: 0.36
-    });
-
-// ==================== 原本方案 B (完整保留原程式碼) ====================
-/*} else if (dRep === 'vmd_ladder') {
+    // 3. DNA 階梯橫竿 (VMD 經典膠囊圓柱：自動貼齊骨架內壁且不刺穿)
+      if (dRep === 'vmd_ladder') {
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
           const shape = new NGL.Shape("vmd_rungs");
           const structure = appState.component.structure;
 
-          // VMD 經典鹼基專屬配色 (RGB 比例)
+          // VMD 經典 4 色 (RGB: 藍/紅/橘/綠)
           const baseColorPalette = {
-            'A': [0.22, 0.35, 0.95], // 鮮藍
-            'T': [0.92, 0.28, 0.35], // 鮮紅/粉紅
-            'C': [0.95, 0.58, 0.20], // 暖橘
-            'G': [0.15, 0.80, 0.25], // 鮮綠
+            'A': [0.22, 0.35, 0.95],
+            'T': [0.92, 0.28, 0.35],
+            'C': [0.95, 0.58, 0.20],
+            'G': [0.15, 0.80, 0.25],
             'U': [0.92, 0.28, 0.35]
           };
 
           const parseBaseColor = (rname) => {
-            const raw = (rname || '').trim().toUpperCase();
-            const clean = raw.replace(/^D/, '').replace(/[35]$/, '');
+            const clean = (rname || '').trim().toUpperCase().replace(/^D/, '').replace(/[35]$/, '');
             return baseColorPalette[clean] || [0.8, 0.84, 0.89];
           };
 
-          // 幾何參數：半徑 0.36 Å (具分量感)，長度 3.45 Å (端點剛好抵達環中心配對面)
           const stubRadius = 0.36;
-          const stubLength = 3.45;
 
           appState.dnaRungStubs.forEach(stub => {
             const aStart = structure.getAtomProxy(stub.anchor);
@@ -632,24 +600,36 @@
               const dz = aEnd.z - aStart.z;
               const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-              if (dist > 0.1) {
-                const scale = stubLength / dist;
-                const tipX = aStart.x + dx * scale;
-                const tipY = aStart.y + dy * scale;
-                const tipZ = aStart.z + dz * scale;
+              if (dist > 0.5) {
+                // 單位向量
+                const ux = dx / dist;
+                const uy = dy / dist;
+                const uz = dz / dist;
+
+                // 關鍵修正：
+                // 起點朝彩帶內壁反向微調 0.65 Å，剛好嵌入彩帶厚度，絕不穿透背部
+                const startX = aStart.x - ux * 0.65;
+                const startY = aStart.y - uy * 0.65;
+                const startZ = aStart.z - uz * 0.65;
+
+                // 終點直接延伸到鹼基中心原子，避免懸空
+                const endX = aEnd.x;
+                const endY = aEnd.y;
+                const endZ = aEnd.z;
 
                 // 實心圓柱本體
-                shape.addCylinder([aStart.x, aStart.y, aStart.z], [tipX, tipY, tipZ], color, stubRadius);
-                // 末端圓球 (做出 VMD 標誌性的 Rounded Cap 圓潤倒角)
-                shape.addSphere([tipX, tipY, tipZ], color, stubRadius);
+                shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
+                // 兩端圓頭（膠囊 Cap）
+                shape.addSphere([endX, endY, endZ], color, stubRadius);
+                shape.addSphere([startX, startY, startZ], color, stubRadius);
               }
             }
           });
 
           appState.ladderShapeComp = appState.stage.addComponentFromObject(shape);
           appState.ladderShapeComp.addRepresentation("buffer");
-        }*/
-      } else if (dRep === 'licorice') {
+        }
+      }else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
