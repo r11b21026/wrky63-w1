@@ -388,17 +388,64 @@
     }
 
 /**
-     * 動態分析結構：強制計算 DSSP 二級結構，並分析核酸與界面
+     * 動態分析結構：通用主鏈二面角演算法，解決 CYM/HIE 或 MD 結構缺乏 DSSP 的問題
      */
     function analyzeStructureDynamically(structure) {
-      // 1. 強制計算 DSSP 二級結構，讓 Beta Sheet 與 Helix 能夠被精準識別出來
-      if (structure) {
-        if (typeof structure.autoSecondaryStructure === 'function') {
-          structure.autoSecondaryStructure();
-        }
-      }
+      // 1. 通用物理判定：依據主鏈 Phi/Psi 動態賦予二級結構 (不綁死 Residue，任何蛋白通用)
+      structure.eachPolymer(polymer => {
+        if (!polymer.isProtein()) return;
 
-      // 2. 宣告一次即可，避免重複宣告報錯
+        const residues = [];
+        polymer.eachResidue(r => residues.push(r));
+
+        // 計算每個殘基的 Phi/Psi 並標記
+        for (let i = 1; i < residues.length - 1; i++) {
+          const prev = residues[i - 1];
+          const curr = residues[i];
+          const next = residues[i + 1];
+
+          // 抓取骨架原子: prev(C) -> curr(N) -> curr(CA) -> curr(C) -> next(N)
+          let cPrev = null, nCurr = null, caCurr = null, cCurr = null, nNext = null;
+
+          prev.eachAtom(a => { if (a.atomname === 'C') cPrev = a; });
+          curr.eachAtom(a => {
+            if (a.atomname === 'N') nCurr = a;
+            if (a.atomname === 'CA') caCurr = a;
+            if (a.atomname === 'C') cCurr = a;
+          });
+          next.eachAtom(a => { if (a.atomname === 'N') nNext = a; });
+
+          if (cPrev && nCurr && caCurr && cCurr && nNext) {
+            // 計算二面角 (度數)
+            const phi = NGL.calcDihedral(cPrev, nCurr, caCurr, cCurr);
+            const psi = NGL.calcDihedral(nCurr, caCurr, cCurr, nNext);
+
+            // 標準 Beta-Sheet 區域: phi 落在 [-180, -60]，psi 落在 [80, 180] 或 [-180, -160]
+            const isBeta = (phi >= -180 && phi <= -60) && ((psi >= 80 && psi <= 180) || (psi >= -180 && psi <= -160));
+            // 標準 Alpha-Helix 區域: phi 落在 [-110, -35]，psi 落在 [-75, -10]
+            const isHelix = (phi >= -110 && phi <= -35) && (psi >= -75 && psi <= -10);
+
+            if (isBeta) {
+              curr.sstruc = 's';
+            } else if (isHelix) {
+              curr.sstruc = 'h';
+            } else {
+              curr.sstruc = 'c';
+            }
+          }
+        }
+
+        // 平滑過濾：連續 2 個殘基以上的 's' 才是穩定 Beta-sheet，孤立單點視為 loop
+        for (let i = 1; i < residues.length - 1; i++) {
+          if (residues[i].sstruc === 's') {
+            const hasNeighbor = (residues[i - 1].sstruc === 's' || residues[i + 1].sstruc === 's');
+            if (!hasNeighbor) residues[i].sstruc = 'c';
+          }
+          // 將所有 atom 的 sstruc 同步為 residue 的 sstruc
+          residues[i].eachAtom(a => { a.sstruc = residues[i].sstruc; });
+        }
+      });
+
       const nucleicResList = [];
       let zincIdx = -1;
 
@@ -460,7 +507,7 @@
         return;
       }
 
-      // 依據前後殘基 O3' 到 P 的距離切斷股（放寬為 4.5 Å 確保末端完整）
+      // 依據前後殘基 O3' 到 P 距離切斷股
       const strandGroups = [];
       let curGroup = [nucleicResList[0]];
 
@@ -500,7 +547,7 @@
         resno: item.resno
       }));
 
-      // 結合口袋計算 (3.5 Å 空間接觸)
+      // 結合口袋計算
       const protCoords = [];
       const dnaCoords = [];
 
@@ -557,41 +604,39 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：徹底修正二級結構誤判 (超寬箭頭 Sheet + 專屬青色 Loop)
+// 1. 蛋白質主體：正統 PyMOL 視覺效果 (自動動態識別 Sheet 與 Loop)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
         if (appState.protColor === 'sstruc') {
-          // 1-1. 真正的 Beta Sheet (只給嚴格的 sheet，排除被誤判為黃色的 turn)
-          // 具備超寬扁平 + 銳利的方向大箭頭
+          // 1-1. 真正的 Beta Sheet (寬扁刀刃狀 + 明確立體箭頭來回)
           appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and sheet`,
+            sele: `${protSele} and (sheet or sstruc s)`,
             color: '#EAB308',     // 鮮黃色 (Beta Sheet)
-            aspectRatio: 6.5,     // ★ 數值拉大：Sheet 變得極寬，像刀刃一樣厚實
+            aspectRatio: 6.8,     // ★ 極寬扁平，呈現 PyMOL 刀刃質感
             scale: 1.15,
-            arrows: true,         // ★ 嚴格在 Sheet 端點繪製箭頭
-            arrowSize: 2.2,       // ★ 大幅放大箭頭倒角，保證清晰看見箭頭來回
+            arrows: true,         // ★ 箭頭開啟
+            arrowSize: 2.2,       // ★ 放大箭頭倒角
             smoothSheet: true,
-            subdiv: 12
+            subdiv: 10
           });
 
           // 1-2. Alpha Helix (螺旋筒)
           appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and helix`,
-            color: '#EF4444',     // 經典鮮紅色 (Alpha Helix)
+            sele: `${protSele} and (helix or sstruc h)`,
+            color: '#EF4444',     // 鮮紅色 (Helix)
             aspectRatio: 2.2,
             scale: 0.95,
             smoothSheet: true,
             subdiv: 8
           });
 
-          // 1-3. 所有的 Loop / Turn / Coil (徹底修正長 Loop 被染黃的 Bug)
-          // 一律呈現青藍色細繩狀，不再有零碎的黃色雜質
+          // 1-3. 連接的 Loop / Coil (細緻青藍色圓繩，絕不染黃)
           appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and not (sheet or helix)`,
-            color: '#38BDF8',     // ★ 經典青藍色 (Cyan)，清晰易辨不泛白
-            aspectRatio: 1.2,     // 接近圓形細繩
-            scale: 0.35,          // ★ 縮得非常細，與寬扁 Sheet 形成鮮明對比
+            sele: `${protSele} and not ((sheet or sstruc s) or (helix or sstruc h))`,
+            color: '#38BDF8',     // 經典青藍色 (Cyan)
+            aspectRatio: 1.2,     // 圓滑細繩
+            scale: 0.35,          // ★ 縮得非常細，與寬扁 Sheet 形成鮮明反差
             smoothSheet: true,
             subdiv: 6
           });
