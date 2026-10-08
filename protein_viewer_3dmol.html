@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3Dmol 分子瀏覽器 (含 β 箭頭)</title>
+<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<style>
+  html, body { margin:0; height:100%; background:#0b0f19; color:#e2e8f0; font-family:'Noto Sans TC',-apple-system,sans-serif; overflow:hidden; }
+  #viewer { position:absolute; inset:0; }
+  .bar { position:absolute; z-index:10; background:rgba(18,24,38,.92); border:1px solid rgba(56,189,248,.3);
+         border-radius:12px; padding:6px 10px; display:flex; gap:8px; align-items:center; font-size:12px; }
+  #top { top:10px; left:10px; right:10px; flex-wrap:wrap; }
+  #bottom { bottom:12px; left:10px; right:10px; display:none; }
+  select, button, input[type=file] { background:#0f172a; color:#bae6fd; border:1px solid rgba(56,189,248,.4);
+         border-radius:8px; padding:4px 8px; font-size:12px; }
+  button { cursor:pointer; } button:hover { background:#1e293b; }
+  input[type=range] { flex:1; accent-color:#38bdf8; }
+  #msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:5; color:#7dd3fc; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="viewer"></div>
+<div id="msg">載入中...</div>
+
+<div id="top" class="bar">
+  <b style="color:#38bdf8">3Dmol</b>
+  <select id="fileSel"><option value="">搜尋 PDB 中...</option></select>
+  <input type="file" id="localFile" accept=".pdb,.ent">
+  <select id="colorSel">
+    <option value="pymol">PyMOL 配色 (螺旋紅/摺疊黃/Loop 綠)</option>
+    <option value="af">AlphaFold 配色 (粉紅/金黃/白)</option>
+  </select>
+  <select id="ssSel">
+    <option value="dssp">二級結構：重新計算 DSSP</option>
+    <option value="file">二級結構：用檔案原本記錄</option>
+  </select>
+  <button id="reset">重設視角</button>
+</div>
+
+<div id="bottom" class="bar">
+  <button id="play">⏸</button>
+  <input type="range" id="slider" min="0" max="0" value="0">
+  <span id="frameLbl">0</span>
+</div>
+
+<script>
+const BG = '#0b0f19';
+const PALETTES = {
+  pymol: { h: '#ff2020', s: '#ffe600', c: '#2fd14f' },
+  af:    { h: '#ff4d8d', s: '#ffc400', c: '#ffffff' }
+};
+const BASE_COL = { A:'#3859F2', DA:'#3859F2', T:'#EB4759', DT:'#EB4759', U:'#EB4759', C:'#F29433', DC:'#F29433', G:'#26CC40', DG:'#26CC40' };
+const NUC = ['DA','DT','DG','DC','A','T','G','C','U','DA5','DA3','DT5','DT3','DG5','DG3','DC5','DC3'];
+const BASE_ATOMS = ['N1','N2','N3','N4','N6','N7','N9','C2','C4','C5','C6','C7','C8','O2','O4','O6','C5M'];
+
+const state = { viewer: null, model: null, pal: 'pymol', ssMode: 'dssp', frames: 1, cur: 0, timer: null, playing: true };
+const $ = id => document.getElementById(id);
+
+/* ---------- Kabsch-Sander DSSP → 'h' / 's' / 'c' ---------- */
+function computeDSSP(atoms) {
+  const resMap = new Map(), R = [];
+  atoms.forEach(a => {
+    if (a.hetflag && !['MSE'].includes(a.resn)) { /* HETATM 蛋白殘基 (如 MSE) 仍可能是胜肽，下面以主鏈原子判斷 */ }
+    const key = a.chain + '|' + a.resi + '|' + (a.icode || '');
+    let r = resMap.get(key);
+    if (!r) { r = { atoms: [], chain: a.chain, pro: a.resn === 'PRO', resn: a.resn }; resMap.set(key, r); R.push(r); }
+    r.atoms.push(a);
+    if (['N','CA','C','O'].includes(a.atom)) r[a.atom] = [a.x, a.y, a.z];
+  });
+  const P = R.filter(r => r.N && r.CA && r.C && r.O && !NUC.includes(r.resn));
+  const n = P.length;
+  const dist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
+  const link = P.map((r, i) => i < n-1 && r.chain === P[i+1].chain && dist(r.C, P[i+1].N) < 2.5);
+  const contiguous = (a, b) => { if (a < 0 || b >= n) return false; for (let k = a; k < b; k++) if (!link[k]) return false; return true; };
+
+  for (let i = 1; i < n; i++) {
+    if (!link[i-1] || P[i].pro) continue;
+    const c = P[i-1].C, o = P[i-1].O, d = [c[0]-o[0], c[1]-o[1], c[2]-o[2]], l = Math.hypot(...d) || 1;
+    P[i].H = [P[i].N[0]+d[0]/l, P[i].N[1]+d[1]/l, P[i].N[2]+d[2]/l];
+  }
+  const acc = P.map(() => new Set());           // acc[d] = 與 NH(d) 成鍵的 CO(a)
+  for (let d = 0; d < n; d++) {
+    if (!P[d].H) continue;
+    for (let a = 0; a < n; a++) {
+      if (Math.abs(a-d) < 2 || dist(P[d].CA, P[a].CA) > 9) continue;
+      const E = 27.888 * (1/dist(P[a].O,P[d].N) + 1/dist(P[a].C,P[d].H) - 1/dist(P[a].O,P[d].H) - 1/dist(P[a].C,P[d].N));
+      if (E < -0.5) acc[d].add(a);
+    }
+  }
+  const hb = (a, d) => a >= 0 && d >= 0 && a < n && d < n && acc[d].has(a);
+  const ss = new Array(n).fill('c');
+  const helix = (turn, ch) => {
+    const t = new Array(n).fill(false);
+    for (let i = 0; i + turn < n; i++) t[i] = contiguous(i, i+turn) && hb(i, i+turn);
+    for (let i = 1; i + turn < n; i++) if (t[i-1] && t[i]) for (let k = i; k < i+turn; k++) ss[k] = ch;
+  };
+  helix(5, 'h'); helix(3, 'h');
+  const E = new Array(n).fill(false), br = [];
+  for (let i = 1; i < n-1; i++) {
+    if (!contiguous(i-1, i+1)) continue;
+    for (let j = i+3; j < n-1; j++) {
+      if (!contiguous(j-1, j+1) || dist(P[i].CA, P[j].CA) > 8) continue;
+      if ((hb(i-1,j) && hb(j,i+1)) || (hb(j-1,i) && hb(i,j+1))) br.push([i,j,'p']);
+      if ((hb(i,j) && hb(j,i)) || (hb(i-1,j+1) && hb(j-1,i+1))) br.push([i,j,'a']);
+    }
+  }
+  const bs = new Set(br.map(b => b.join(',')));
+  br.forEach(([i,j,t]) => {
+    if (bs.has([i+1, t==='p'?j+1:j-1, t].join(',')) || bs.has([i-1, t==='p'?j-1:j+1, t].join(','))) E[i] = E[j] = true;
+  });
+  for (let i = 1; i < n-1; i++) if (!E[i] && E[i-1] && E[i+1] && link[i-1] && link[i]) E[i] = true;
+  for (let i = 0; i < n; i++) if (E[i]) ss[i] = 's';
+  helix(4, 'h');
+
+  const min = { h: 4, s: 2 };
+  for (let i = 0; i < n;) {
+    let j = i;
+    while (j < n && ss[j] === ss[i] && (j === i || link[j-1])) j++;
+    if (ss[i] !== 'c' && j - i < min[ss[i]]) for (let k = i; k < j; k++) ss[k] = 'c';
+    i = j;
+  }
+  // 寫回 3Dmol 的 atom.ss / ssbegin / ssend (箭頭靠 ssend 決定位置)
+  P.forEach((r, i) => {
+    const begin = ss[i] !== 'c' && (i === 0 || ss[i-1] !== ss[i] || !link[i-1]);
+    const end = ss[i] !== 'c' && (i === n-1 || ss[i+1] !== ss[i] || !link[i]);
+    r.atoms.forEach(a => { a.ss = ss[i]; a.ssbegin = begin; a.ssend = end; });
+  });
+}
+
+/* ---------- 樣式 ---------- */
+function applyStyle() {
+  const v = state.viewer, pal = PALETTES[state.pal];
+  const atoms = state.model.selectedAtoms({});
+  if (state.ssMode === 'dssp') computeDSSP(atoms.filter(a => !NUC.includes(a.resn) && !a.__skip));
+  else atoms.forEach(a => { if (a.__ss0) { a.ss = a.__ss0.ss; a.ssbegin = a.__ss0.b; a.ssend = a.__ss0.e; } });
+
+  v.setStyle({}, {});
+  // 蛋白質：cartoon (β 股帶箭頭、Loop 為細圓管)
+  v.setStyle({ resn: NUC.concat(['ZN']), invert: true }, {
+    cartoon: { arrows: true, tubes: true, thickness: 0.35,
+               colorfunc: a => a.ss === 'h' ? pal.h : a.ss === 's' ? pal.s : pal.c }
+  });
+  // DNA：骨架絲帶 + 鹼基短棒
+  v.setStyle({ resn: NUC }, { cartoon: { color: '#7dd3fc', thickness: 0.5 } });
+  v.addStyle({ resn: NUC, atom: BASE_ATOMS }, { stick: { radius: 0.22, colorfunc: a => BASE_COL[a.resn] || '#cbd5e1' } });
+  // 鋅離子
+  v.setStyle({ resn: 'ZN' }, { sphere: { radius: 0.9, color: '#dbeafe' } });
+  v.render();
+}
+
+/* ---------- 載入 ---------- */
+function load(text) {
+  const v = state.viewer;
+  stopAnim();
+  v.removeAllModels();
+  v.addModelsAsFrames(text, 'pdb');
+  state.model = v.getModel(0);
+  state.model.selectedAtoms({}).forEach(a => { a.__ss0 = { ss: a.ss, b: a.ssbegin, e: a.ssend }; });
+  state.frames = v.getNumFrames();
+  applyStyle();
+  v.zoomTo(); v.render();
+  $('msg').style.display = 'none';
+
+  const bar = $('bottom');
+  if (state.frames > 1) {
+    bar.style.display = 'flex';
+    $('slider').max = state.frames - 1;
+    state.cur = 0; state.playing = true; $('play').textContent = '⏸';
+    startAnim();
+  } else bar.style.display = 'none';
+}
+async function loadUrl(url) {
+  $('msg').style.display = 'flex'; $('msg').textContent = '載入中...';
+  try {
+    const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+    load(await r.text());
+  } catch (e) { $('msg').textContent = '讀取失敗：' + e.message; }
+}
+
+/* ---------- 動畫 ---------- */
+function showFrame(i) {
+  state.cur = i; $('slider').value = i; $('frameLbl').textContent = i;
+  state.viewer.setFrame(i);
+}
+function startAnim() { stopAnim(); state.timer = setInterval(() => { if (state.playing) showFrame((state.cur + 1) % state.frames); }, 60); }
+function stopAnim() { if (state.timer) clearInterval(state.timer); state.timer = null; }
+$('play').onclick = () => { state.playing = !state.playing; $('play').textContent = state.playing ? '⏸' : '▶'; };
+$('slider').oninput = e => { state.playing = false; $('play').textContent = '▶'; showFrame(+e.target.value); };
+
+/* ---------- UI ---------- */
+$('colorSel').onchange = e => { state.pal = e.target.value; applyStyle(); };
+$('ssSel').onchange = e => { state.ssMode = e.target.value; applyStyle(); };
+$('reset').onclick = () => { state.viewer.zoomTo(); state.viewer.render(); };
+$('fileSel').onchange = e => e.target.value && loadUrl(e.target.value);
+$('localFile').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(load); };
+
+async function listFiles() {
+  const q = new URLSearchParams(location.search).get('file');
+  let found = q ? [q] : [];
+  const host = location.hostname, path = location.pathname.split('/').filter(Boolean);
+  if (!found.length && host.endsWith('.github.io') && path.length) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${host.split('.')[0]}/${path[0]}/contents`);
+      if (r.ok) found = (await r.json()).filter(f => f.type === 'file' && /\.pdb$/i.test(f.name)).map(f => f.name);
+    } catch (e) {}
+  }
+  const sel = $('fileSel'); sel.innerHTML = '';
+  if (!found.length) { sel.innerHTML = '<option value="">請用上方按鈕選本機 PDB，或網址加 ?file=檔名.pdb</option>'; $('msg').textContent = '請選擇 PDB 檔'; return; }
+  found.forEach(f => sel.add(new Option(f, f)));
+  loadUrl(found[0]);
+}
+
+window.addEventListener('load', () => {
+  state.viewer = $3Dmol.createViewer('viewer', { backgroundColor: BG });
+  listFiles();
+});
+</script>
+</body>
+</html>
