@@ -390,7 +390,26 @@
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
       let zincIdx = -1;
+      // 標記每股的端點殘基 (5' 端與 3' 端)
+      const terminalResnoSet = new Set();
+      strandGroups.forEach(grp => {
+        if (grp.length > 0) {
+          terminalResnoSet.add(grp[0].resno);
+          terminalResnoSet.add(grp[grp.length - 1].resno);
+        }
+      });
 
+      // 產生短柱時標記 isTerminal
+      appState.dnaRungStubs = nucleicResList.map(item => ({
+        anchor: item.c1Index,
+        target: item.ringIndex,
+        resname: item.resname,
+        resno: item.resno,
+        isTerminal: terminalResnoSet.has(item.resno),
+        o3: item.o3,
+        p: item.p
+      }));
+      
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -715,6 +734,15 @@
             multipleBond: 'off'
           });
         }
+      }
+      // 疊加端點微細骨架棒（平常藏在彩帶裡，fraying 時自然露出撐住末端）
+      if (appState.terminalResnoList && appState.terminalResnoList.length > 0) {
+        appState.component.addRepresentation('licorice', {
+          sele: `(${appState.terminalResnoList.join(' or ')}) and nucleic and backbone`,
+          ...dColorParams,
+          radius: 0.16,
+          multipleBond: 'off'
+        });
       }
     }
 
