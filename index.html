@@ -64,6 +64,28 @@
 
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- 鹼基顏色圖例 (Legend) -->
+  <div id="base-legend" class="absolute top-16 left-3 sm:left-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd">
+    <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1">DNA BASES</div>
+    <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #3859F2;"></span>
+        <span class="text-slate-200">A <span class="text-[10px] text-slate-400">(Ade)</span></span>
+      </div>
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #EB4759;"></span>
+        <span class="text-slate-200">T <span class="text-[10px] text-slate-400">(Thy)</span></span>
+      </div>
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #F29433;"></span>
+        <span class="text-slate-200">C <span class="text-[10px] text-slate-400">(Cyt)</span></span>
+      </div>
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2.5 h-2.5 rounded-full" style="background-color: #26CC40;"></span>
+        <span class="text-slate-200">G <span class="text-[10px] text-slate-400">(Gua)</span></span>
+      </div>
+    </div>
+  </div>
     
     <!-- 左側：標題與結構選單 -->
     <div class="vmd-panel rounded-xl px-3 py-2 flex items-center space-x-2.5 pointer-events-auto shadow-lg max-w-full">
@@ -565,7 +587,7 @@
               radiusType: 'size',   // 關鍵 1：告訴 NGL 改用手動指定的固定尺寸
               radiusSize: 0.6,     // 寬度從 0.6 收斂到 0.45，適度變窄更精緻
               aspectRatio: 4,    // 寬厚比調低：厚度大幅增加，輕鬆包覆短柱
-              tension: 0.3,
+              tension: 0.15,
               smoothSheet: false,   // 保留立體截面飽滿度
               subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
             });
