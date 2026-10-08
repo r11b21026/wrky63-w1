@@ -557,34 +557,49 @@
 
       if (pRep === 'newcartoon') {
         if (appState.protColor === 'vmd_sstruc') {
-          // 動態註冊/覆蓋 VMD 專屬配色方案 (Sheet=鮮黃, Helix=洋紅紫, Loop/Turn=純白)
           const vmdSchemeName = 'vmd_secondary_color';
           try {
             NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
+              // 取得顏色整數：Sheet=鮮黃, Helix=洋紅紫, Loop/Turn=純白
               this.atomColor = function (atom) {
-                // NGL 內部二級結構代碼：'s' 為 sheet/strand, 'h'/'g'/'i' 為 helix
                 const ss = atom.sstruc;
+                if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
+                if (ss === 'h' || ss === 'g' || ss === 'i') return 0xA855F7; // 洋紅紫 (Alpha Helix)
+                return 0xFFFFFF; // 純白 (Loop / Turn / Coil)
+              };
+
+              // ★ 關鍵修復：NGL cartoon 頂點內插著色器必需的 atomColorToArray 方法
+              this.atomColorToArray = function (atom, array, offset) {
+                const ss = atom.sstruc;
+                let r, g, b;
                 if (ss === 's') {
-                  return 0xEAB308; // 鮮黃色 (Beta Sheet)
+                  // #EAB308 (RGB: 234, 179, 8)
+                  r = 0.918; g = 0.702; b = 0.031;
                 } else if (ss === 'h' || ss === 'g' || ss === 'i') {
-                  return 0xA855F7; // 洋紅紫 (Alpha Helix)
+                  // #A855F7 (RGB: 168, 85, 247)
+                  r = 0.659; g = 0.333; b = 0.969;
                 } else {
-                  return 0xFFFFFF; // 純白色 (Coil / Loop / Turn)
+                  // #FFFFFF
+                  r = 1.0; g = 1.0; b = 1.0;
                 }
+                array[offset] = r;
+                array[offset + 1] = g;
+                array[offset + 2] = b;
+                return array;
               };
             });
           } catch (e) {
-            // 已註冊則忽略
+            // 已存在則忽略
           }
 
           appState.component.addRepresentation('cartoon', {
             sele: protSele,
-            colorScheme: vmdSchemeName, // 使用自訂 VMD 配色
-            aspectRatio: 3.8,           // VMD NewCartoon 經典立體寬度
+            colorScheme: vmdSchemeName,
+            aspectRatio: 3.8,
             scale: 0.95,
-            arrows: true,               // Sheet 端點帶有經典方向箭頭
-            smoothSheet: true,          // Sheet 表面平整光滑
-            subdiv: 8                   // 採樣精細，整條彩帶無縫連貫
+            arrows: true,       // Beta Sheet 顯示箭頭
+            smoothSheet: true,
+            subdiv: 8
           });
         } else {
           const pColorParams = getColorParams(appState.protColor);
