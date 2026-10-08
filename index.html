@@ -552,38 +552,39 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體：正統 VMD NewCartoon 視覺配置 (鮮黃 Sheet 箭頭 / 白色 Loop 繩狀)
+// 1. 蛋白質主體：整條連續彩帶一筆畫完，搭配正統 VMD 二級結構著色
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
         if (appState.protColor === 'vmd_sstruc') {
-          // 1-1. Beta Sheet 寬扁立體箭頭 (鮮黃色 #EAB308)
-          appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and sheet`,
-            color: '#EAB308',
-            aspectRatio: 4.8,
-            scale: 1.15,
-            arrows: true,
-            smoothSheet: true,
-            subdiv: 8
-          });
+          // 動態註冊/覆蓋 VMD 專屬配色方案 (Sheet=鮮黃, Helix=洋紅紫, Loop/Turn=純白)
+          const vmdSchemeName = 'vmd_secondary_color';
+          try {
+            NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
+              this.atomColor = function (atom) {
+                // NGL 內部二級結構代碼：'s' 為 sheet/strand, 'h'/'g'/'i' 為 helix
+                const ss = atom.sstruc;
+                if (ss === 's') {
+                  return 0xEAB308; // 鮮黃色 (Beta Sheet)
+                } else if (ss === 'h' || ss === 'g' || ss === 'i') {
+                  return 0xA855F7; // 洋紅紫 (Alpha Helix)
+                } else {
+                  return 0xFFFFFF; // 純白色 (Coil / Loop / Turn)
+                }
+              };
+            });
+          } catch (e) {
+            // 已註冊則忽略
+          }
 
-          // 1-2. Alpha Helix 螺旋筒 (洋紅紫 #A855F7)
           appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} and helix`,
-            color: '#A855F7',
-            aspectRatio: 2.2,
+            sele: protSele,
+            colorScheme: vmdSchemeName, // 使用自訂 VMD 配色
+            aspectRatio: 3.8,           // VMD NewCartoon 經典立體寬度
             scale: 0.95,
-            smoothSheet: true,
-            subdiv: 8
-          });
-
-          // 1-3. Loop / Turn / Coil 柔性繩狀 (純白 #FFFFFF)
-          appState.component.addRepresentation('tube', {
-            sele: `${protSele} and not (sheet or helix)`,
-            color: '#FFFFFF',
-            radius: 0.18,
-            subdiv: 6
+            arrows: true,               // Sheet 端點帶有經典方向箭頭
+            smoothSheet: true,          // Sheet 表面平整光滑
+            subdiv: 8                   // 採樣精細，整條彩帶無縫連貫
           });
         } else {
           const pColorParams = getColorParams(appState.protColor);
@@ -623,9 +624,9 @@
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
               radiusType: 'size',
-              radiusSize: 0.42,
-              aspectRatio: 3.2,
-              tension: 0.15,
+              radiusSize: 0.6,
+              aspectRatio: 4,
+              tension: 0.3,
               smoothSheet: false,
               subdiv: 12
             });
@@ -677,9 +678,9 @@
                 const uz = dz / dist;
 
                 // 起點微縮 0.85 Å，穩固嵌在彩帶厚度腹中，背面不突起
-                const startX = aBackbone.x + ux * 0.85;
-                const startY = aBackbone.y + uy * 0.85;
-                const startZ = aBackbone.z + uz * 0.85;
+                const startX = aBackbone.x + ux * 1.2;
+                const startY = aBackbone.y + uy * 1.2;
+                const startZ = aBackbone.z + uz * 1.2;
 
                 const endX = aBase.x;
                 const endY = aBase.y;
