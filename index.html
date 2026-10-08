@@ -393,8 +393,10 @@
      */
     function analyzeStructureDynamically(structure) {
       // 1. 強制計算 DSSP 二級結構，讓 Beta Sheet 與 Helix 能夠被精準識別出來
-      if (structure && typeof structure.autoSecondaryStructure === 'function') {
-        structure.autoSecondaryStructure();
+      if (structure) {
+        if (typeof structure.autoSecondaryStructure === 'function') {
+          structure.autoSecondaryStructure();
+        }
       }
 
       // 2. 宣告一次即可，避免重複宣告報錯
@@ -556,65 +558,50 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：AlphaFold / VMD 風格 (黃色扁平寬箭頭 Sheet + 鮮明螺旋 Helix + 細線 Loop)
+// 1. 蛋白質主體：PyMOL 經典寬箭頭 + 細線繩 Loop
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
-        if (appState.protColor === 'vmd_sstruc') {
-          const vmdSchemeName = 'vmd_secondary_color';
-          try {
-            NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
-              this.atomColor = function (atom) {
-                const ss = atom.sstruc;
-                if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
-                if (ss === 'h' || ss === 'g' || ss === 'i') return 0xA855F7; // 洋紅紫 (Alpha Helix)
-                return 0x94A3B8; // 淺灰白 (Loop / Coil / Turn，柔和不刺眼)
-              };
-
-              this.atomColorToArray = function (atom, array, offset) {
-                const ss = atom.sstruc;
-                let r, g, b;
-                if (ss === 's') {
-                  // #EAB308 鮮黃 (Sheet)
-                  r = 0.918; g = 0.702; b = 0.031;
-                } else if (ss === 'h' || ss === 'g' || ss === 'i') {
-                  // #A855F7 紫紅 (Helix)
-                  r = 0.659; g = 0.333; b = 0.969;
-                } else {
-                  // #94A3B8 淺灰白 (Loop)
-                  r = 0.580; g = 0.639; b = 0.722;
-                }
-                array[offset] = r;
-                array[offset + 1] = g;
-                array[offset + 2] = b;
-                return array;
-              };
-            });
-          } catch (e) {}
-
-          appState.component.addRepresentation('cartoon', {
-            sele: protSele,
-            colorScheme: vmdSchemeName,
-            aspectRatio: 5.5,     // 數值調大：Sheet 與 Helix 變成寬扁箭頭/飄帶，Loop 自動收縮成細扁線
-            scale: 0.85,          // 整體收斂厚度，讓 Loop 呈現纖細線狀感
-            arrows: true,         // ★ 關鍵：Beta Sheet 端點繪製經典立體方向箭頭
-            smoothSheet: true,    // 平滑過渡
-            subdiv: 10            // 提升幾何精確度
+        const vmdSchemeName = 'pymol_sstruc_color';
+        try {
+          NGL.ColormakerRegistry.add(vmdSchemeName, function (params) {
+            this.atomColor = function (atom) {
+              const ss = atom.sstruc;
+              if (ss === 's') return 0xEAB308; // 鮮黃色 (Beta Sheet)
+              if (ss === 'h' || ss === 'g' || ss === 'i') return 0xA855F7; // 洋紅紫 (Alpha Helix)
+              return 0xE2E8F0; // 亮白/銀灰 (Loop 細線)
+            };
+            this.atomColorToArray = function (atom, array, offset) {
+              const ss = atom.sstruc;
+              if (ss === 's') {
+                array[offset] = 0.918; array[offset + 1] = 0.702; array[offset + 2] = 0.031; // 黃
+              } else if (ss === 'h' || ss === 'g' || ss === 'i') {
+                array[offset] = 0.659; array[offset + 1] = 0.333; array[offset + 2] = 0.969; // 紫
+              } else {
+                array[offset] = 0.886; array[offset + 1] = 0.910; array[offset + 2] = 0.941; // 白
+              }
+              return array;
+            };
           });
-        } else {
-          const pColorParams = getColorParams(appState.protColor);
-          appState.component.addRepresentation('cartoon', {
-            sele: protSele,
-            ...pColorParams,
-            aspectRatio: 4.5,
-            scale: 0.85,
-            arrows: true,
-            smoothSheet: true,
-            subdiv: 6
-          });
-        }
+        } catch (e) {}
+
+        const colorCfg = (appState.protColor === 'vmd_sstruc') 
+          ? { colorScheme: vmdSchemeName } 
+          : getColorParams(appState.protColor);
+
+        appState.component.addRepresentation('cartoon', {
+          sele: protSele,
+          ...colorCfg,
+          // ★ PyMOL 核心幾何參數：
+          aspectRatio: 6.0,     // 數值調大：Sheet 大幅變寬且平整，Loop 自動收縮成細圓線
+          scale: 1.0,           // 寬度飽滿
+          arrows: true,         // ★ 關鍵：Sheet 末端生成 PyMOL 經典實心立體箭頭
+          arrowSize: 1.4,       // 放大箭頭頭部，輪廓極其分明
+          smoothSheet: true,    // Sheet 表面像刀刃一樣平整
+          subdiv: 12            // 幾何採樣精細，邊緣銳利清晰
+        });
       } else if (pRep === 'tube') {
-        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#94A3B8' } : getColorParams(appState.protColor);
+        const pColorParams = (appState.protColor === 'vmd_sstruc') ? { color: '#E2E8F0' } : getColorParams(appState.protColor);
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
@@ -630,7 +617,7 @@
           multipleBond: 'off'
         });
       }
-
+      
       // 2. DNA 雙螺旋絲帶
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
