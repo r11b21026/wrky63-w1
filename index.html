@@ -388,15 +388,13 @@
     }
 
 /**
-     * 自備向量二面角計算函式 (度數 -180 ~ +180)，不依賴 NGL 內部 API
+     * 自備向量二面角計算函式 (度數 -180 ~ +180)
      */
     function calculateDihedralAngle(p1, p2, p3, p4) {
-      // 向量 b1, b2, b3
       const b1 = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
       const b2 = { x: p3.x - p2.x, y: p3.y - p2.y, z: p3.z - p2.z };
       const b3 = { x: p4.x - p3.x, y: p4.y - p3.y, z: p4.z - p3.z };
 
-      // 外積 n1 = b1 x b2, n2 = b2 x b3
       const n1 = {
         x: b1.y * b2.z - b1.z * b2.y,
         y: b1.z * b2.x - b1.x * b2.z,
@@ -408,7 +406,6 @@
         z: b2.x * b3.y - b2.y * b3.x
       };
 
-      // m1 = n1 x (b2 / |b2|)
       const lenB2 = Math.sqrt(b2.x * b2.x + b2.y * b2.y + b2.z * b2.z);
       if (lenB2 < 1e-6) return 0;
       const b2u = { x: b2.x / lenB2, y: b2.y / lenB2, z: b2.z / lenB2 };
@@ -424,15 +421,19 @@
     }
 
     /**
-     * 動態分析結構：通用主鏈二面角分析
+     * 動態分析結構：強制將二面角結構注入 NGL 底層緩衝區
      */
     function analyzeStructureDynamically(structure) {
-      // 1. 通用物理判定：遍歷多肽殘基，依據 Phi/Psi 標註二級結構
+      // 1. 通用物理判定：動態覆寫 NGL 結構底層二級結構陣列
+      const sstrucArray = structure.sstruc; // NGL 內部的 Uint8Array / Int8Array
+
       structure.eachPolymer(polymer => {
         if (!polymer.isProtein()) return;
 
         const residues = [];
         polymer.eachResidue(r => residues.push(r));
+
+        const detectedSS = new Array(residues.length).fill('c');
 
         for (let i = 1; i < residues.length - 1; i++) {
           const prev = residues[i - 1];
@@ -453,32 +454,45 @@
             const phi = calculateDihedralAngle(cPrev, nCurr, caCurr, cCurr);
             const psi = calculateDihedralAngle(nCurr, caCurr, cCurr, nNext);
 
-            // 標準 Beta-Sheet 伸展構型區間 (拉氏圖左上角)
-            const isBeta = (phi >= -180 && phi <= -50) && ((psi >= 70 && psi <= 180) || (psi >= -180 && psi <= -160));
+            // 標準 Beta-Sheet 伸展構型區間 (拉氏圖左上方)
+            const isBeta = (phi >= -180 && phi <= -45) && ((psi >= 60 && psi <= 180) || (psi >= -180 && psi <= -150));
             // 標準 Alpha-Helix 區間
             const isHelix = (phi >= -120 && phi <= -30) && (psi >= -80 && psi <= -5);
 
-            if (isBeta) {
-              curr.sstruc = 's';
-            } else if (isHelix) {
-              curr.sstruc = 'h';
-            } else {
-              curr.sstruc = 'c';
-            }
+            if (isBeta) detectedSS[i] = 's';
+            else if (isHelix) detectedSS[i] = 'h';
           }
         }
 
         // 平滑過濾：連續 2 個殘基以上才構成穩定 Beta-strand
         for (let i = 1; i < residues.length - 1; i++) {
-          if (residues[i].sstruc === 's') {
-            const hasNeighbor = (residues[i - 1].sstruc === 's' || residues[i + 1].sstruc === 's');
-            if (!hasNeighbor) residues[i].sstruc = 'c';
+          if (detectedSS[i] === 's') {
+            const hasNeighbor = (detectedSS[i - 1] === 's' || detectedSS[i + 1] === 's');
+            if (!hasNeighbor) detectedSS[i] = 'c';
           }
-          // 同步給殘基內所有原子
-          residues[i].eachAtom(a => { a.sstruc = residues[i].sstruc; });
+        }
+
+        // ★ 核心修復：把字符代碼寫入 NGL 底層結構二級結構陣列 ('s' -> 115, 'h' -> 104, 'c' -> 99)
+        for (let i = 0; i < residues.length; i++) {
+          const ssChar = detectedSS[i];
+          const ssCode = ssChar.charCodeAt(0);
+          const res = residues[i];
+
+          // 覆寫 residueStore 與 atomStore
+          if (structure.residueStore && structure.residueStore.sstruc) {
+            structure.residueStore.sstruc[res.index] = ssCode;
+          }
+          if (sstrucArray) {
+            sstrucArray[res.index] = ssCode;
+          }
+          res.eachAtom(a => {
+            if (structure.atomStore && structure.atomStore.sstruc) {
+              structure.atomStore.sstruc[a.index] = ssCode;
+            }
+          });
         }
       });
-
+      
       const nucleicResList = [];
       let zincIdx = -1;
 
@@ -637,7 +651,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-// 1. 蛋白質主體：整條單一連續彩帶（絕不切斷斷裂），搭配自訂二級結構著色
+// 1. 蛋白質主體：PyMOL 經典 NewCartoon (由底層注入的二級結構直接驅動幾何箭頭)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
@@ -671,12 +685,12 @@
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
           ...colorCfg,
-          aspectRatio: 6.5,     // 寬度拉大：Beta-sheet 呈現厚刃感，Loop 自然壓成細線
-          scale: 1.05,
-          arrows: true,         // Sheet 端點產生方向箭頭
-          arrowSize: 2.0,       // 放大箭頭錐體
+          aspectRatio: 6.5,     // ★ 數值拉大：Beta-Sheet 大幅展寬，呈現 PyMOL 厚刃感
+          scale: 1.1,           // 寬度飽滿
+          arrows: true,         // ★ 關鍵：NGL 會在辨識到的 Sheet 末端自動繪製立體箭頭！
+          arrowSize: 2.2,       // ★ 大幅放大箭頭倒角，確保箭頭極其醒目
           smoothSheet: true,
-          subdiv: 10
+          subdiv: 12
         });
       } else if (pRep === 'tube') {
         const pColorParams = (appState.protColor === 'sstruc') ? { color: '#38BDF8' } : getColorParams(appState.protColor);
