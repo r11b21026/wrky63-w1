@@ -555,17 +555,17 @@
         });
       }
 
-      // 2. DNA 雙螺旋絲帶
+      // 2. DNA 雙螺旋絲帶（加厚彩帶，包覆骨架短柱，避免穿刺與薄膜感）
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
             appState.component.addRepresentation('cartoon', {
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
-              aspectRatio: 2.8,
-              scale: 0.85,
+              aspectRatio: 1.8,     // 數值調小 = 厚度增加（寬厚比更接近實心帶，輕鬆包覆圓柱）
+              scale: 1.15,          // 彩帶整體放大加粗，確保邊緣完全咬合圓柱
               smoothSheet: true,
-              subdiv: 6
+              subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
             });
           }
         });
