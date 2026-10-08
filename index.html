@@ -388,17 +388,16 @@
       return { colorScheme: colorVal };
     }
 
-    /**
-     * 動態分析結構：放寬分股閾值為 4.5 Å，防止 fraying 誤切斷彩帶
+/**
+     * 動態分析結構：強制計算 DSSP 二級結構，並分析核酸與界面
      */
     function analyzeStructureDynamically(structure) {
-      // ★ 強制計算 DSSP 二級結構，確保 beta-sheet 與 alpha-helix 能被精準辨識
+      // 1. 強制計算 DSSP 二級結構，讓 Beta Sheet 與 Helix 能夠被精準識別出來
       if (structure && typeof structure.autoSecondaryStructure === 'function') {
         structure.autoSecondaryStructure();
       }
 
-      const nucleicResList = [];
-      let zincIdx = -1;
+      // 2. 宣告一次即可，避免重複宣告報錯
       const nucleicResList = [];
       let zincIdx = -1;
 
@@ -420,15 +419,13 @@
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
             if (aname === "P") {
               p = { x: a.x, y: a.y, z: a.z };
-              backboneAtom = a.index; // 優先以 P 作為彩帶核心起點
+              backboneAtom = a.index;
             }
 
-            // 備用骨架原子（若沒有 P，例如 5' 端）
             if (!backboneAtom && (aname === "C4'" || aname === "C3'" || aname === "C1'")) {
               backboneAtom = a.index;
             }
 
-            // 鹼基指向中心：嘌呤取 C4/N1，嘧啶取 N3/C4
             if (aname === "N1" || aname === "N3" || aname === "C4") {
               if (!baseRing || aname === "N1" || aname === "N3") {
                 baseRing = a.index;
