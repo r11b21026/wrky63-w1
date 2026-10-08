@@ -562,8 +562,8 @@
             appState.component.addRepresentation('cartoon', {
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
-              aspectRatio: 0.8,     // 數值調小 = 厚度增加（寬厚比更接近實心帶，輕鬆包覆圓柱）
-              scale: 2,          // 彩帶整體放大加粗，確保邊緣完全咬合圓柱
+              aspectRatio: 0.2,     // 數值調小 = 厚度增加（寬厚比更接近實心帶，輕鬆包覆圓柱）
+              scale: 5,          // 彩帶整體放大加粗，確保邊緣完全咬合圓柱
               smoothSheet: true,
               subdiv: 12            // 提高採樣精度，讓端點曲線更平滑圓潤
             });
