@@ -153,13 +153,22 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="sstruc" selected>二級結構 (DSSP 原生)</option>
+            <option value="pymol_ss" selected>二級結構：PyMOL 風格 (螺旋紅/摺疊黃/Loop 綠)</option>
+            <option value="af_ss">二級結構：AlphaFold 風格 (螺旋粉紅/摺疊金黃/Loop 白)</option>
+            <option value="sstruc">二級結構 (NGL 原生配色)</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
             <option value="#ef4444">ColorID 1: 紅色 (Red)</option>
             <option value="#22c55e">ColorID 2: 綠色 (Green)</option>
             <option value="#eab308">ColorID 3: 黃色 (Yellow)</option>
+          </select>
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[11px] text-slate-400 mb-1">二級結構判定</label>
+          <select id="ss-mode-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+            <option value="dssp" selected>重新計算 (Kabsch-Sander DSSP，較準確)</option>
+            <option value="file">使用檔案 / NGL 原本判定</option>
           </select>
         </div>
       </div>
@@ -260,7 +269,9 @@
       timerId: null,
       fps: 20,
       protStyle: 'cartoon',
-      protColor: 'sstruc',
+      protColor: 'pymol_ss',
+      ssMode: 'dssp',
+      origSS: null,
       dnaStyle: 'vmd_ladder',
       dnaColor: '#7dd3fc',
       showBaseLabels: false,
@@ -299,6 +310,7 @@
       loopLabel: document.getElementById('loop-label'),
       proteinStyleSelect: document.getElementById('protein-style-select'),
       proteinColorSelect: document.getElementById('protein-color-select'),
+      ssModeSelect: document.getElementById('ss-mode-select'),
       dnaStyleSelect: document.getElementById('dna-style-select'),
       dnaColorSelect: document.getElementById('dna-color-select'),
       chkBaseLabels: document.getElementById('chk-base-labels'),
@@ -372,6 +384,145 @@
       if (!colorVal) return { color: '#7dd3fc' };
       if (colorVal.startsWith('#')) return { color: colorVal };
       return { colorScheme: colorVal };
+    }
+
+    /* ===== 自訂二級結構配色 (螺旋 / 摺疊 / Loop 各自一色) ===== */
+    function registerSSColorSchemes() {
+      const make = (helix, sheet, loop) => function () {
+        this.atomColor = function (atom) {
+          const ss = atom.sstruc;
+          if (ss === 'h' || ss === 'g' || ss === 'i') return helix;
+          if (ss === 'e' || ss === 'b') return sheet;
+          return loop;
+        };
+      };
+      NGL.ColormakerRegistry.addScheme(make(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss');
+      NGL.ColormakerRegistry.addScheme(make(0xFF4D8D, 0xFFD23F, 0xFFFFFF), 'af_ss');
+    }
+
+    /* ===== Kabsch-Sander DSSP (簡化為 螺旋 h / 摺疊 e / Loop c 三態) ===== */
+    function computeDSSP(structure) {
+      const R = [];
+      structure.eachResidue(r => {
+        if (!r.isProtein()) return;
+        const at = {};
+        r.eachAtom(a => {
+          const n = a.atomname.trim();
+          if (n === 'N' || n === 'CA' || n === 'C' || n === 'O') at[n] = [a.x, a.y, a.z];
+        });
+        if (at.N && at.CA && at.C && at.O) {
+          R.push({ index: r.index, chain: r.chainIndex, pro: (r.resname || '').trim().toUpperCase() === 'PRO', ...at });
+        }
+      });
+      const n = R.length;
+      const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+      // 相鄰殘基是否以胜肽鍵相連
+      const link = new Array(n).fill(false);
+      for (let i = 0; i < n - 1; i++) {
+        link[i] = R[i].chain === R[i + 1].chain && dist(R[i].C, R[i + 1].N) < 2.5;
+      }
+      const contiguous = (a, b) => { // a..b 之間全部相連
+        if (a < 0 || b >= n) return false;
+        for (let k = a; k < b; k++) if (!link[k]) return false;
+        return true;
+      };
+
+      // 醯胺 H 原子位置
+      for (let i = 1; i < n; i++) {
+        if (!link[i - 1] || R[i].pro) continue;
+        const c = R[i - 1].C, o = R[i - 1].O;
+        const dx = c[0] - o[0], dy = c[1] - o[1], dz = c[2] - o[2];
+        const l = Math.hypot(dx, dy, dz) || 1;
+        R[i].H = [R[i].N[0] + dx / l, R[i].N[1] + dy / l, R[i].N[2] + dz / l];
+      }
+
+      // 氫鍵：CO(a) → NH(d)
+      const acc = Array.from({ length: n }, () => new Set()); // acc[d] = 與 NH(d) 成鍵的 a
+      for (let d = 0; d < n; d++) {
+        if (!R[d].H) continue;
+        for (let a = 0; a < n; a++) {
+          if (Math.abs(a - d) < 2) continue;
+          if (dist(R[d].CA, R[a].CA) > 9.0) continue;
+          const rON = dist(R[a].O, R[d].N), rCH = dist(R[a].C, R[d].H);
+          const rOH = dist(R[a].O, R[d].H), rCN = dist(R[a].C, R[d].N);
+          const E = 0.084 * 332 * (1 / rON + 1 / rCH - 1 / rOH - 1 / rCN);
+          if (E < -0.5) acc[d].add(a);
+        }
+      }
+      const hb = (a, d) => a >= 0 && d >= 0 && a < n && d < n && acc[d].has(a); // CO(a)→NH(d)
+
+      const ss = new Array(n).fill('c');
+
+      // n-turn 螺旋 (G=3, H=4, I=5)；優先順序 H > E > G > I
+      const markHelix = (turn, ch) => {
+        const t = new Array(n).fill(false);
+        for (let i = 0; i + turn < n; i++) t[i] = contiguous(i, i + turn) && hb(i, i + turn);
+        for (let i = 1; i + turn < n; i++) {
+          if (t[i - 1] && t[i]) for (let k = i; k < i + turn; k++) ss[k] = ch;
+        }
+      };
+      markHelix(5, 'i');
+      markHelix(3, 'g');
+
+      // β-bridge → ladder → E
+      const E = new Array(n).fill(false);
+      const bridges = []; // [i, j, 'p'|'a']
+      for (let i = 1; i < n - 1; i++) {
+        if (!contiguous(i - 1, i + 1)) continue;
+        for (let j = i + 3; j < n - 1; j++) {
+          if (!contiguous(j - 1, j + 1)) continue;
+          if (dist(R[i].CA, R[j].CA) > 8.0) continue;
+          const par = (hb(i - 1, j) && hb(j, i + 1)) || (hb(j - 1, i) && hb(i, j + 1));
+          const anti = (hb(i, j) && hb(j, i)) || (hb(i - 1, j + 1) && hb(j - 1, i + 1));
+          if (par) bridges.push([i, j, 'p']);
+          if (anti) bridges.push([i, j, 'a']);
+        }
+      }
+      const bset = new Set(bridges.map(b => b.join(',')));
+      bridges.forEach(([i, j, t]) => {
+        const nj = t === 'p' ? j + 1 : j - 1;
+        if (bset.has([i + 1, nj, t].join(',')) || bset.has([i - 1, t === 'p' ? j - 1 : j + 1, t].join(','))) {
+          E[i] = E[j] = true;
+        }
+      });
+      // 一個殘基的凸起 (bulge)：夾在兩個 E 之間補成 E
+      for (let i = 1; i < n - 1; i++) if (!E[i] && E[i - 1] && E[i + 1] && link[i - 1] && link[i]) E[i] = true;
+      for (let i = 0; i < n; i++) if (E[i]) ss[i] = 'e';
+
+      markHelix(4, 'h'); // α 螺旋最優先，覆蓋 E
+
+      // 轉為三態並濾掉過短片段
+      const tri = ss.map(c => (c === 'h' || c === 'g' || c === 'i') ? 'h' : (c === 'e' ? 'e' : 'c'));
+      const minLen = { h: 4, e: 2 };
+      for (let i = 0; i < n;) {
+        let j = i;
+        while (j < n && tri[j] === tri[i] && (j === i || link[j - 1])) j++;
+        if (tri[i] !== 'c' && (j - i) < minLen[tri[i]]) for (let k = i; k < j; k++) tri[k] = 'c';
+        i = j;
+      }
+      return R.map((r, k) => ({ index: r.index, ss: tri[k] }));
+    }
+
+    function applySecondaryStructure() {
+      if (!appState.component) return;
+      const st = appState.component.structure;
+      const store = st.residueStore;
+      if (!store || !store.sstruc) { console.warn('residueStore.sstruc 不存在，略過二級結構重算'); return; }
+      if (!appState.origSS) appState.origSS = new Uint8Array(store.sstruc);
+      if (appState.ssMode === 'file') {
+        store.sstruc.set(appState.origSS);
+        return;
+      }
+      try {
+        const result = computeDSSP(st);
+        // 蛋白質殘基先全部歸零成 Loop，再寫入判定結果
+        st.eachResidue(r => { if (r.isProtein()) store.sstruc[r.index] = 'c'.charCodeAt(0); });
+        result.forEach(({ index, ss }) => { store.sstruc[index] = ss.charCodeAt(0); });
+      } catch (e) {
+        console.error('DSSP 計算失敗，改用原本判定', e);
+        store.sstruc.set(appState.origSS);
+      }
     }
 
     /**
@@ -540,7 +691,12 @@
       if (pRep === 'cartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
-          ...pColorParams
+          ...pColorParams,
+          aspectRatio: 5,       // 摺疊/螺旋帶狀寬扁比
+          subdiv: 12,           // 曲線細分，更平滑
+          radialSegments: 20,
+          capped: true,
+          smoothSheet: true     // 摺疊拉直，呈現箭頭 β-strand
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
@@ -830,6 +986,7 @@
           asTrajectory: true
         });
         appState.component = comp;
+        appState.origSS = null;
 
         // 僅修正 Amber 非標準殘基名稱，使 NGL 辨識胜肽主鏈
         comp.structure.eachResidue(r => {
@@ -838,6 +995,7 @@
           if (rn === 'HIE' || rn === 'HID' || rn === 'HIP') r.resname = 'HIS';
         });
 
+        applySecondaryStructure();
         analyzeStructureDynamically(comp.structure);
         applyAllRepresentations();
 
@@ -971,6 +1129,11 @@
         appState.protStyle = e.target.value;
         applyAllRepresentations();
       });
+      dom.ssModeSelect.addEventListener('change', (e) => {
+        appState.ssMode = e.target.value;
+        applySecondaryStructure();
+        applyAllRepresentations();
+      });
       dom.proteinColorSelect.addEventListener('change', (e) => {
         appState.protColor = e.target.value;
         applyAllRepresentations();
@@ -1005,6 +1168,7 @@
     }
 
     window.addEventListener('load', () => {
+      registerSSColorSchemes();
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
         cameraType: 'perspective',
