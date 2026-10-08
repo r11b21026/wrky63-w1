@@ -65,7 +65,7 @@
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-    <!-- 鹼基顏色圖例 (Legend: 右上角，手機端不擋左側標題) -->
+    <!-- 鹼基顏色圖例 -->
     <div id="base-legend" class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
       <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1 flex items-center justify-between">
         <span>DNA BASES (VMD)</span>
@@ -423,7 +423,7 @@
     }
 
     /**
-     * 動態分析結構：透過主鏈二面角動態產出二級結構範圍 (完全通用任何 PDB/軌跡檔)
+     * 動態分析結構：透過主鏈二面角 + Calpha 伸展幾何複合判定二級結構 (完全不寫死任何殘基，通用任何 PDB)
      */
     function analyzeStructureDynamically(structure) {
       const sheetResnos = [];
@@ -435,39 +435,74 @@
         const residues = [];
         polymer.eachResidue(r => residues.push(r));
 
-        const tempSS = new Array(residues.length).fill('c');
+        const n = residues.length;
+        if (n < 3) return;
 
-        for (let i = 1; i < residues.length - 1; i++) {
+        const tempSS = new Array(n).fill('c');
+
+        for (let i = 1; i < n - 1; i++) {
           const prev = residues[i - 1];
           const curr = residues[i];
           const next = residues[i + 1];
 
           let cPrev = null, nCurr = null, caCurr = null, cCurr = null, nNext = null;
+          let caPrev = null, caNext = null;
 
-          prev.eachAtom(a => { if (a.atomname === 'C') cPrev = a; });
+          prev.eachAtom(a => { 
+            if (a.atomname === 'C') cPrev = a; 
+            if (a.atomname === 'CA') caPrev = a;
+          });
           curr.eachAtom(a => {
             if (a.atomname === 'N') nCurr = a;
             if (a.atomname === 'CA') caCurr = a;
             if (a.atomname === 'C') cCurr = a;
           });
-          next.eachAtom(a => { if (a.atomname === 'N') nNext = a; });
+          next.eachAtom(a => { 
+            if (a.atomname === 'N') nNext = a; 
+            if (a.atomname === 'CA') caNext = a;
+          });
 
+          // 1. 若 NGL 的 DSSP 辨識已有 strand/sheet 標籤，優先採納
+          const nglSS = (curr.sstruc || '').toLowerCase();
+          if (nglSS === 'e' || nglSS === 's') {
+            tempSS[i] = 's';
+            continue;
+          } else if (nglSS === 'h') {
+            tempSS[i] = 'h';
+            continue;
+          }
+
+          // 2. 幾何二面角與伸展構象分析 (能耐受 MD 熱震盪)
           if (cPrev && nCurr && caCurr && cCurr && nNext) {
             const phi = calculateDihedralAngle(cPrev, nCurr, caCurr, cCurr);
             const psi = calculateDihedralAngle(nCurr, caCurr, cCurr, nNext);
 
-            // 拉氏圖 Beta-Sheet 伸展構型區間 (容許 MD 熱震盪)
-            const isBeta = (phi >= -180 && phi <= -45) && ((psi >= 60 && psi <= 180) || (psi >= -180 && psi <= -150));
-            // 拉氏圖 Alpha-Helix 區間
-            const isHelix = (phi >= -120 && phi <= -30) && (psi >= -80 && psi <= -5);
+            let caDist = 0;
+            if (caPrev && caNext) {
+              const dx = caPrev.x - caNext.x;
+              const dy = caPrev.y - caNext.y;
+              const dz = caPrev.z - caNext.z;
+              caDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
 
-            if (isBeta) tempSS[i] = 's';
-            else if (isHelix) tempSS[i] = 'h';
+            // 寬容度 Beta-Sheet / Extended 判定
+            const isBetaAngle = (phi >= -180 && phi <= -30) && 
+                                ((psi >= 45 && psi <= 180) || (psi >= -180 && psi <= -135));
+            const isExtendedStrand = (caDist >= 5.95 && phi < 0);
+
+            // 寬容度 Alpha-Helix 判定
+            const isHelixAngle = (phi >= -160 && phi <= -30) && (psi >= -90 && psi <= 10);
+
+            if (isBetaAngle || isExtendedStrand) {
+              tempSS[i] = 's';
+            } else if (isHelixAngle) {
+              tempSS[i] = 'h';
+            }
           }
         }
 
-        // 平滑過濾：連續 2 個殘基以上方視為穩定片層
-        for (let i = 1; i < residues.length - 1; i++) {
+        // 3. 連續性平滑過濾 (至少連續 2 個殘基即納入)
+        for (let i = 1; i < n - 1; i++) {
           if (tempSS[i] === 's') {
             const hasNeighbor = (tempSS[i - 1] === 's' || tempSS[i + 1] === 's');
             if (hasNeighbor) {
@@ -644,7 +679,7 @@
       const dRep = appState.dnaStyle;
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體：正統 PyMOL 風格 (由通用二面角判定驅動超寬大箭頭 + 青藍細繩 Loop)
+      // 1. 蛋白質主體：正統 PyMOL 風格 (超寬大箭頭 + 青藍細繩 Loop)
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
 
       if (pRep === 'newcartoon') {
@@ -652,39 +687,35 @@
         const hSele = appState.customHelixSele || 'none';
 
         if (appState.protColor === 'sstruc') {
-          // 1-1. 實體 Beta Sheet：鮮黃色超寬扁平 + 實體雙向大箭頭
-          if (sSele !== 'none') {
-            appState.component.addRepresentation('cartoon', {
-              sele: `${protSele} and (${sSele})`,
-              color: '#EAB308',     // 鮮黃色 (Beta Sheet)
-              aspectRatio: 6.8,     // 寬度大幅擴張
-              scale: 1.15,
-              arrows: true,         // ★ 雙向立體方向箭頭
-              arrowSize: 2.4,       // 放大箭頭錐體
-              smoothSheet: true,
-              subdiv: 10
-            });
-          }
+          // 組合自訂判定與 NGL 內建 DSSP sheet 關鍵字，雙重保底
+          const effectiveSheetSele = (sSele !== 'none') ? `((${sSele}) or sheet)` : 'sheet';
+          const effectiveHelixSele = (hSele !== 'none') ? `((${hSele}) or helix)` : 'helix';
+
+          // 1-1. 實體 Beta Sheet：鮮黃色超寬扁平 + 實體方向大箭頭
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and ${effectiveSheetSele}`,
+            color: '#EAB308',     // 鮮黃色 (Beta Sheet)
+            aspectRatio: 6.8,     // 寬度大幅擴張
+            scale: 1.15,
+            arrows: true,         // 立體方向箭頭
+            arrowSize: 2.4,       // 放大箭頭錐體
+            smoothSheet: true,
+            subdiv: 10
+          });
 
           // 1-2. Alpha Helix (鮮紅色)
-          if (hSele !== 'none') {
-            appState.component.addRepresentation('cartoon', {
-              sele: `${protSele} and (${hSele}) and not (${sSele})`,
-              color: '#EF4444',
-              aspectRatio: 2.2,
-              scale: 0.95,
-              smoothSheet: true,
-              subdiv: 8
-            });
-          }
+          appState.component.addRepresentation('cartoon', {
+            sele: `${protSele} and ${effectiveHelixSele} and not ${effectiveSheetSele}`,
+            color: '#EF4444',
+            aspectRatio: 2.2,
+            scale: 0.95,
+            smoothSheet: true,
+            subdiv: 8
+          });
 
           // 1-3. 連接的 Loop / Coil：收縮為青藍色細緻圓繩 (絕不變黃)
-          const nonSheetHelixSele = (sSele !== 'none' || hSele !== 'none')
-            ? `and not (${sSele !== 'none' ? sSele : 'none'} or ${hSele !== 'none' ? hSele : 'none'})`
-            : '';
-
           appState.component.addRepresentation('cartoon', {
-            sele: `${protSele} ${nonSheetHelixSele}`,
+            sele: `${protSele} and not ${effectiveSheetSele} and not ${effectiveHelixSele}`,
             color: '#38BDF8',     // 經典青藍色 (Cyan)
             aspectRatio: 1.2,     // 圓滑細繩
             scale: 0.35,          // 纖細化
@@ -785,7 +816,6 @@
                 const uy = dy / dist;
                 const uz = dz / dist;
 
-                // 起點微縮 0.85 Å，穩固嵌在彩帶厚度腹中，背面不突起
                 const startX = aBackbone.x + ux * 1.2;
                 const startY = aBackbone.y + uy * 1.2;
                 const startZ = aBackbone.z + uz * 1.2;
@@ -1000,7 +1030,7 @@
         });
         appState.component = comp;
 
-        // ★ 核心修復：修正 Amber/MD 非標準殘基（CYM/HIE），使 NGL 納入正規胜肽骨架計算
+        // 修復 Amber/MD 非標準殘基（CYM/HIE），使 NGL 納入正規胜肽骨架計算
         comp.structure.eachResidue(r => {
           const rn = (r.resname || '').trim().toUpperCase();
           if (rn === 'CYM') r.resname = 'CYS';
@@ -1125,7 +1155,6 @@
 
       dom.btnFocusInterface.addEventListener('click', toggleFocusInterface);
 
-      // 樣式面板與圖例連動（開啟面板時暫時隱藏右上角圖例，避免重疊）
       dom.btnToggleRep.addEventListener('click', () => {
         dom.repModal.classList.toggle('hidden');
         const legend = document.getElementById('base-legend');
