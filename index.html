@@ -110,7 +110,7 @@
 
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
-      <button id="btn-focus-interface" title="特寫 K24/K27 與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫 Lys114/Lys117 與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -293,12 +293,12 @@
       dnaRungStubs: [],
       ladderShapeComp: null,
       
-      // 動態鎖定的關鍵殘基與接觸原子
-      keyLysResnos: [],          // [k24_resno, k27_resno]
+      // 鎖定特定關鍵殘基
+      keyLysResnos: [],          // [114, 117] (或依基序推算出的 resno)
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
-      distanceAtomPairs: [],     // [[atomIdx1, atomIdx2], ...]
+      distanceAtomPairs: [],
       
       zincAtomIndex: -1,
       isLoadingFile: false
@@ -613,7 +613,7 @@
     }
 
     /**
-     * 動態分析結構：以 WRKYGQK 為基準尋找 K24 與 K27，並鎖定與其接觸的 DNA 原子與殘基
+     * 動態分析結構：鎖定 Lys114 與 Lys117，並識別接觸 DNA 原子
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -704,7 +704,7 @@
         }));
       }
 
-      // 2. 以 WRKYGQK 為基準尋找 K24 與 K27
+      // 2. 基於 WRKYGQK = 108..114 定位 Lys114 與 Lys117
       const protResList = [];
       structure.eachResidue(r => {
         if (r.isProtein()) {
@@ -721,63 +721,48 @@
       const seqStr = protResList.map(x => x.code).join('');
       const motifIdx = seqStr.indexOf('WRKYGQK');
 
-      let k24Res = null;
-      let k27Res = null;
+      let k114_resno = 114;
+      let k117_resno = 117;
 
       if (motifIdx !== -1) {
-        // 從 WRKYGQK 往 C 端尋找 Lysine
-        const lysDownstream = [];
-        for (let i = motifIdx + 6; i < protResList.length; i++) {
-          if (protResList[i].code === 'K') {
-            lysDownstream.push(protResList[i]);
-          }
-        }
-        // K24 為第 1 個 (或 WRKYGQK 本身結尾的 K 之後的第 1 個)，K27 為接續的 Lys
-        if (lysDownstream.length >= 2) {
-          k24Res = lysDownstream[0];
-          k27Res = lysDownstream[1];
-        } else if (lysDownstream.length === 1) {
-          k24Res = lysDownstream[0];
-        }
+        const wRes = protResList[motifIdx];
+        const wResno = wRes.resno;
+        // W 往後 +6 為 Lys114, +9 為 Lys117
+        k114_resno = wResno + 6;
+        k117_resno = wResno + 9;
       }
 
-      // 備案：若基序推算不完全，依絕對編號或最近的 Lys 回退判定
-      if (!k24Res) k24Res = protResList.find(r => r.resno === 24 && r.code === 'K');
-      if (!k27Res) k27Res = protResList.find(r => r.resno === 27 && r.code === 'K');
+      appState.keyLysResnos = [k114_resno, k117_resno];
 
-      appState.keyLysResnos = [];
-      if (k24Res) appState.keyLysResnos.push(k24Res.resno);
-      if (k27Res) appState.keyLysResnos.push(k27Res.resno);
-
-      // 3. 取得 K24 與 K27 的特定原子以計算氫鍵與測距
-      let k24_nz = null;
-      let k27_n = null;
+      // 3. 取得 Lys114(NZ) 與 Lys117(N)
+      let k114_nz = null;
+      let k117_n = null;
 
       structure.eachAtom(a => {
         const an = a.atomname.trim();
-        if (k24Res && a.resno === k24Res.resno && an === 'NZ') {
-          k24_nz = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
+        if (a.resno === k114_resno && an === 'NZ') {
+          k114_nz = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
         }
-        if (k27Res && a.resno === k27Res.resno && an === 'N') {
-          k27_n = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
+        if (a.resno === k117_resno && an === 'N') {
+          k117_n = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
         }
       });
 
-      // 4. 尋找與 K24 (大溝鹼基) 與 K27 (磷酸骨架) 形成接觸的 DNA 原子
+      // 4. 接觸 DNA 原子與測距配對
       const contactedDnaResnos = new Set();
       const distPairs = [];
 
-      // K24 NZ -> 最近的大溝受體 (N7, O4, O6, N4)
-      if (k24_nz) {
+      // Lys114 NZ -> 最近大溝受體 (N7, O4, O6, N4)
+      if (k114_nz) {
         let bestTarget = null;
-        let minD2 = 4.2 * 4.2; // 寬鬆上限，避免因波動完全斷線
+        let minD2 = 4.2 * 4.2;
         structure.eachAtom(a => {
           if (!a.isNucleic()) return;
           const an = a.atomname.trim();
           if (['N7', 'O4', 'O6', 'N4'].includes(an)) {
-            const dx = a.x - k24_nz.x;
-            const dy = a.y - k24_nz.y;
-            const dz = a.z - k24_nz.z;
+            const dx = a.x - k114_nz.x;
+            const dy = a.y - k114_nz.y;
+            const dz = a.z - k114_nz.z;
             const d2 = dx * dx + dy * dy + dz * dz;
             if (d2 < minD2) {
               minD2 = d2;
@@ -787,21 +772,21 @@
         });
         if (bestTarget) {
           contactedDnaResnos.add(bestTarget.resno);
-          distPairs.push([k24_nz.index, bestTarget.index]);
+          distPairs.push([k114_nz.index, bestTarget.index]);
         }
       }
 
-      // K27 N -> 最近的骨架磷酸根氧 (OP1, OP2, O1P, O2P)
-      if (k27_n) {
+      // Lys117 N -> 最近骨架磷酸根氧 (OP1, OP2, O1P, O2P)
+      if (k117_n) {
         let bestTarget = null;
         let minD2 = 4.0 * 4.0;
         structure.eachAtom(a => {
           if (!a.isNucleic()) return;
           const an = a.atomname.trim();
           if (['OP1', 'OP2', 'O1P', 'O2P'].includes(an)) {
-            const dx = a.x - k27_n.x;
-            const dy = a.y - k27_n.y;
-            const dz = a.z - k27_n.z;
+            const dx = a.x - k117_n.x;
+            const dy = a.y - k117_n.y;
+            const dz = a.z - k117_n.z;
             const d2 = dx * dx + dy * dy + dz * dz;
             if (d2 < minD2) {
               minD2 = d2;
@@ -811,16 +796,11 @@
         });
         if (bestTarget) {
           contactedDnaResnos.add(bestTarget.resno);
-          distPairs.push([k27_n.index, bestTarget.index]);
+          distPairs.push([k117_n.index, bestTarget.index]);
         }
       }
 
-      // 設定特寫 Selection 語法
-      if (appState.keyLysResnos.length > 0) {
-        appState.contactProtSele = `(${appState.keyLysResnos.join(' or ')}) and protein and not hydrogen`;
-      } else {
-        appState.contactProtSele = 'none';
-      }
+      appState.contactProtSele = `(${appState.keyLysResnos.join(' or ')}) and protein and not hydrogen`;
 
       const dResArr = Array.from(contactedDnaResnos);
       if (dResArr.length > 0) {
@@ -837,7 +817,7 @@
     }
 
     /**
-     * 重建所有 Representation
+     * 重建所有 Representation (支援特寫時背景自動透明化)
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -853,12 +833,16 @@
       const pColorParams = getColorParams(appState.protColor);
       const dColorParams = getColorParams(appState.dnaColor);
 
+      // 特寫模式下：外圍背景物體透明度設為 0.2，突出核心棒狀與虛線
+      const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
+
       // 1. 蛋白質主體
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
       if (pRep === 'cartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
           ...pColorParams,
+          opacity: bgOpacity,
           aspectRatio: 5,
           subdiv: 12,
           radialSegments: 20,
@@ -869,12 +853,14 @@
         appState.component.addRepresentation('tube', {
           sele: protSele,
           ...pColorParams,
+          opacity: bgOpacity,
           radius: 0.28
         });
       } else if (pRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: protSele,
           ...pColorParams,
+          opacity: bgOpacity,
           radius: 0.2,
           multipleBond: 'off'
         });
@@ -887,6 +873,7 @@
             appState.component.addRepresentation('cartoon', {
               sele: `${strandSele} and not protein and not (_ZN or :ZN or [ZN] or zinc)`,
               ...dColorParams,
+              opacity: bgOpacity,
               radiusType: 'size',
               radiusSize: 0.6,
               aspectRatio: 4,
@@ -946,31 +933,28 @@
           });
 
           appState.ladderShapeComp = appState.stage.addComponentFromObject(shape);
-          appState.ladderShapeComp.addRepresentation("buffer");
+          appState.ladderShapeComp.addRepresentation("buffer", {
+            opacity: bgOpacity
+          });
         }
       } else if (dRep === 'licorice') {
         appState.component.addRepresentation('licorice', {
           sele: 'nucleic and not protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)',
           ...dColorParams,
+          opacity: bgOpacity,
           radius: 0.22,
           multipleBond: 'off'
         });
       }
 
       // 4. 鋅離子 (ZN)
-      if (appState.zincAtomIndex >= 0) {
-        appState.component.addRepresentation('spacefill', {
-          sele: `@${appState.zincAtomIndex}`,
-          color: '#94a3b8',
-          scale: 0.65
-        });
-      } else {
-        appState.component.addRepresentation('spacefill', {
-          sele: '_ZN or :ZN or [ZN] or zinc',
-          color: '#94a3b8',
-          scale: 0.65
-        });
-      }
+      const znSele = appState.zincAtomIndex >= 0 ? `@${appState.zincAtomIndex}` : '_ZN or :ZN or [ZN] or zinc';
+      appState.component.addRepresentation('spacefill', {
+        sele: znSele,
+        color: '#94a3b8',
+        opacity: bgOpacity,
+        scale: 0.65
+      });
 
       // 5. 鹼基文字標籤
       if (appState.showBaseLabels) {
@@ -983,40 +967,44 @@
         });
       }
 
-      // 6. 結合區特寫模式 (精確顯示 K24, K27 與 DNA 接觸殘基 + 虛線與 Å 距離標註)
+      // 6. 結合區特寫模式 (100% 飽和實心凸顯 + 虛線 Å 數值 + 絕對編號文字標註)
       if (appState.isFocusingInterface) {
-        // 蛋白質關鍵 Lys (K24, K27)
+        // 關鍵 Lys (Lys114, Lys117)
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
             colorScheme: 'element',
             radius: 0.24,
+            opacity: 1.0,
             multipleBond: 'off'
           });
 
-          // 標註 LYS 殘基名稱與編號
+          // 絕對殘基位置標籤 (Lys114, Lys117)
           appState.component.addRepresentation('label', {
             sele: `${appState.contactProtSele} and .CA`,
             labelType: 'format',
             labelFormat: '%(resname)s%(resno)s',
             color: '#38bdf8',
-            scale: 1.3,
+            scale: 1.35,
             fontWeight: 'bold',
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            backgroundColor: '#0b0f19',
+            backgroundOpacity: 0.85
           });
         }
 
-        // 接觸之 DNA 殘基 (整座核苷酸變為 licorice)
+        // 接觸之 DNA 殘基
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
             colorScheme: 'element',
             radius: 0.22,
+            opacity: 1.0,
             multipleBond: 'off'
           });
         }
 
-        // 繪製氫鍵接觸虛線與 Ångström 數值
+        // 氫鍵虛線與 Ångström 標註
         if (appState.distanceAtomPairs && appState.distanceAtomPairs.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.distanceAtomPairs,
@@ -1044,7 +1032,6 @@
       if (!appState.component) return;
       appState.isFocusingInterface = !appState.isFocusingInterface;
 
-      // 每次切換特寫時重新計算幾何距離以確保在當前 frame 精確配對
       analyzeStructureDynamically(appState.component.structure);
       applyAllRepresentations();
 
@@ -1081,7 +1068,6 @@
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
 
-      // 特寫模式下或階梯模式下即時更新幾何
       if (appState.isFocusingInterface || appState.dnaStyle === 'vmd_ladder') {
         analyzeStructureDynamically(appState.component.structure);
         applyAllRepresentations();
