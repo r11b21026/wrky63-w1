@@ -170,6 +170,9 @@
             <option value="dssp" selected>重新計算 (Kabsch-Sander DSSP，較準確)</option>
             <option value="file">使用檔案 / NGL 原本判定</option>
           </select>
+          <label class="flex items-center gap-2 mt-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" id="arrow-toggle" checked> β 股末端顯示箭頭 (關閉則改用淺→深漸層表示方向)
+          </label>
         </div>
       </div>
     </div>
@@ -271,6 +274,7 @@
       protStyle: 'cartoon',
       protColor: 'pymol_ss',
       ssMode: 'dssp',
+      arrowsOn: true,
       origSS: null,
       ssSchemeIds: null,
       strandT: new Map(),
@@ -313,6 +317,7 @@
       proteinStyleSelect: document.getElementById('protein-style-select'),
       proteinColorSelect: document.getElementById('protein-color-select'),
       ssModeSelect: document.getElementById('ss-mode-select'),
+      arrowToggle: document.getElementById('arrow-toggle'),
       dnaStyleSelect: document.getElementById('dna-style-select'),
       dnaColorSelect: document.getElementById('dna-color-select'),
       chkBaseLabels: document.getElementById('chk-base-labels'),
@@ -401,7 +406,7 @@
             const ss = atom.sstruc;
             if (ss === 'h' || ss === 'g' || ss === 'i') return helix;
             if (ss === 'e' || ss === 'b') {
-              const t = appState.strandT.get(atom.residueIndex);
+              const t = appState.arrowsOn ? undefined : appState.strandT.get(atom.residueIndex);
               if (t === undefined) return sheet;
               return toInt(light.map((l, k) => l + (dark[k] - l) * t));
             }
@@ -436,6 +441,51 @@
       });
       flush();
       appState.strandT = map;
+    }
+
+    /* ===== β 股箭頭：攔截 NGL cartoon 的「曲線粗細」陣列 =====
+       NGL 帶狀截面 = size × (aspectRatio·cos, sin)，寬與厚都由 size 決定。
+       這裡在每條 β 股的 C 端把 size 先放大再線性縮小，形成箭頭。 */
+    function installArrowPatch() {
+      try {
+        const Cart = NGL.RepresentationRegistry.get('cartoon');
+        if (!Cart || Cart.prototype.__arrowPatched) return;
+        const origGetSpline = Cart.prototype.getSpline;
+        Cart.prototype.getSpline = function (polymer) {
+          const spline = origGetSpline.call(this, polymer);
+          const origSize = spline.getSubdividedSize;
+          spline.getSubdividedSize = function (params) {
+            const out = origSize.call(this, params);
+            if (!appState.arrowsOn || !polymer.isProtein()) return out;
+            try {
+              const size = out.size, m = this.subdiv, n = polymer.residueCount;
+              const st = polymer.structure, rp = st.getResidueProxy();
+              const HEAD = 1.8; // 箭頭起點相對寬度
+              let runStart = -1;
+              for (let r = 0; r <= n; r++) {
+                let isE = false;
+                if (r < n) { rp.index = polymer.residueIndexStart + r; isE = (rp.sstruc === 'e' || rp.sstruc === 'b'); }
+                if (isE) { if (runStart < 0) runStart = r; continue; }
+                if (runStart >= 0) {
+                  const b = r - 1;                         // 這條 β 股的最後一個殘基
+                  if (b - runStart >= 1) {
+                    const i0 = (b - 1) * m + Math.floor(m / 2);       // 箭頭起點
+                    const i1 = Math.min(size.length - 1, b * m + Math.floor(m / 2)); // 箭頭尖端
+                    const S = size[b * m] * HEAD;
+                    const tipRef = (b + 1) * m < size.length ? size[Math.min(size.length - 1, (b + 1) * m)] : size[b * m] * 0.1;
+                    const tip = Math.min(tipRef, S * 0.3);
+                    for (let i = i0; i <= i1; i++) size[i] = S + (tip - S) * ((i - i0) / Math.max(1, i1 - i0));
+                  }
+                  runStart = -1;
+                }
+              }
+            } catch (e) { console.warn('箭頭修補失敗，改用原本粗細', e); }
+            return out;
+          };
+          return spline;
+        };
+        Cart.prototype.__arrowPatched = true;
+      } catch (e) { console.warn('無法安裝箭頭修補', e); }
     }
 
     /* ===== Kabsch-Sander DSSP (簡化為 螺旋 h / 摺疊 e / Loop c 三態) ===== */
@@ -1169,6 +1219,10 @@
         appState.protStyle = e.target.value;
         applyAllRepresentations();
       });
+      dom.arrowToggle.addEventListener('change', (e) => {
+        appState.arrowsOn = e.target.checked;
+        applyAllRepresentations();
+      });
       dom.ssModeSelect.addEventListener('change', (e) => {
         appState.ssMode = e.target.value;
         applySecondaryStructure();
@@ -1209,6 +1263,7 @@
 
     window.addEventListener('load', () => {
       registerSSColorSchemes();
+      installArrowPatch();
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
         cameraType: 'perspective',
