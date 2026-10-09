@@ -110,7 +110,7 @@
 
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
-      <button id="btn-focus-interface" title="特寫 Lys114/Lys117 與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫關鍵接觸區與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -266,6 +266,10 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
+    // ===== 基準學術編號設定 =====
+    const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108
+    const TARGET_DISPLAY_RESNOS = [114, 117]; // 欲在特寫區展示的標準殘基編號清單 (Lys114, Lys117)
+
     const appState = {
       stage: null,
       component: null,
@@ -292,9 +296,10 @@
       dnaStrandSelections: [],
       dnaRungStubs: [],
       ladderShapeComp: null,
+      focusLabelsShapeComp: null, // 存放自訂 3D 文字標籤的 Shape Component
       
-      // 鎖定特定關鍵殘基
-      keyLysResnos: [],          // [114, 117] (或依基序推算出的 resno)
+      focusTargetResnosInPdb: [],
+      focusLabelsData: [],        // [{ text: 'Lys114', atomIndex: 123 }, ...]
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
@@ -613,7 +618,7 @@
     }
 
     /**
-     * 動態分析結構：鎖定 Lys114 與 Lys117，並識別接觸 DNA 原子
+     * 動態分析結構：以 W(108) 建立相對位移映射，動態對應 Lys114、Lys117
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -704,7 +709,7 @@
         }));
       }
 
-      // 2. 基於 WRKYGQK = 108..114 定位 Lys114 與 Lys117
+      // 2. 蛋白質序列解析與基準位移計算 (以 W=108 為標準)
       const protResList = [];
       structure.eachResidue(r => {
         if (r.isProtein()) {
@@ -721,38 +726,61 @@
       const seqStr = protResList.map(x => x.code).join('');
       const motifIdx = seqStr.indexOf('WRKYGQK');
 
-      let k114_resno = 114;
-      let k117_resno = 117;
-
+      let deltaOffset = 0;
       if (motifIdx !== -1) {
-        const wRes = protResList[motifIdx];
-        const wResno = wRes.resno;
-        // W 往後 +6 為 Lys114, +9 為 Lys117
-        k114_resno = wResno + 6;
-        k117_resno = wResno + 9;
+        const wInPdb = protResList[motifIdx].resno;
+        deltaOffset = STANDARD_ANCHOR_W - wInPdb; // delta = 108 - PDB中的W
+      } else {
+        const sampleW = protResList.find(r => r.code === 'W');
+        if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      appState.keyLysResnos = [k114_resno, k117_resno];
+      // 3. 找出當前 PDB 實際對應的殘基 resno，並儲存其 CA 原子 index 與要顯示的字串
+      const targetPdbResnos = [];
+      const labelsData = [];
 
-      // 3. 取得 Lys114(NZ) 與 Lys117(N)
+      TARGET_DISPLAY_RESNOS.forEach(stdNo => {
+        const actualResnoInPdb = stdNo - deltaOffset;
+        targetPdbResnos.push(actualResnoInPdb);
+
+        const matchRes = protResList.find(r => r.resno === actualResnoInPdb);
+        const resCode3 = matchRes ? (matchRes.resname[0] + matchRes.resname.slice(1).toLowerCase()) : 'Lys';
+        const displayLabel = `${resCode3}${stdNo}`; // 嚴格產生 "Lys114", "Lys117"
+
+        structure.eachAtom(a => {
+          if (a.resno === actualResnoInPdb && a.atomname.trim() === 'CA') {
+            labelsData.push({
+              text: displayLabel,
+              atomIndex: a.index
+            });
+          }
+        });
+      });
+
+      appState.focusTargetResnosInPdb = targetPdbResnos;
+      appState.focusLabelsData = labelsData;
+
+      // 4. 接觸 DNA 原子與測距配對 (Lys114 NZ, Lys117 N)
+      const k114_actual = 114 - deltaOffset;
+      const k117_actual = 117 - deltaOffset;
+
       let k114_nz = null;
       let k117_n = null;
 
       structure.eachAtom(a => {
         const an = a.atomname.trim();
-        if (a.resno === k114_resno && an === 'NZ') {
+        if (a.resno === k114_actual && an === 'NZ') {
           k114_nz = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
         }
-        if (a.resno === k117_resno && an === 'N') {
+        if (a.resno === k117_actual && an === 'N') {
           k117_n = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
         }
       });
 
-      // 4. 接觸 DNA 原子與測距配對
       const contactedDnaResnos = new Set();
       const distPairs = [];
 
-      // Lys114 NZ -> 最近大溝受體 (N7, O4, O6, N4)
+      // Lys114 NZ -> 大溝鹼基受體 (N7, O4, O6, N4)
       if (k114_nz) {
         let bestTarget = null;
         let minD2 = 4.2 * 4.2;
@@ -776,7 +804,7 @@
         }
       }
 
-      // Lys117 N -> 最近骨架磷酸根氧 (OP1, OP2, O1P, O2P)
+      // Lys117 N -> 骨架磷酸根氧 (OP1, OP2, O1P, O2P)
       if (k117_n) {
         let bestTarget = null;
         let minD2 = 4.0 * 4.0;
@@ -800,7 +828,7 @@
         }
       }
 
-      appState.contactProtSele = `(${appState.keyLysResnos.join(' or ')}) and protein and not hydrogen`;
+      appState.contactProtSele = `(${targetPdbResnos.join(' or ')}) and protein and not hydrogen`;
 
       const dResArr = Array.from(contactedDnaResnos);
       if (dResArr.length > 0) {
@@ -809,15 +837,15 @@
         appState.contactDnaSele = 'none';
       }
 
-      appState.focusViewSele = [...appState.keyLysResnos, ...dResArr].length > 0
-        ? [...appState.keyLysResnos, ...dResArr].join(' or ')
+      appState.focusViewSele = [...targetPdbResnos, ...dResArr].length > 0
+        ? [...targetPdbResnos, ...dResArr].join(' or ')
         : 'nucleic';
 
       appState.distanceAtomPairs = distPairs;
     }
 
     /**
-     * 重建所有 Representation (支援特寫時背景自動透明化)
+     * 重建所有 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -827,13 +855,17 @@
         appState.stage.removeComponent(appState.ladderShapeComp);
         appState.ladderShapeComp = null;
       }
+      if (appState.focusLabelsShapeComp) {
+        appState.stage.removeComponent(appState.focusLabelsShapeComp);
+        appState.focusLabelsShapeComp = null;
+      }
 
       const pRep = appState.protStyle;
       const dRep = appState.dnaStyle;
       const pColorParams = getColorParams(appState.protColor);
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 特寫模式下：外圍背景物體透明度設為 0.2，突出核心棒狀與虛線
+      // 特寫時背景半透明化 (透明度 0.22)
       const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
 
       // 1. 蛋白質主體
@@ -967,9 +999,9 @@
         });
       }
 
-      // 6. 結合區特寫模式 (100% 飽和實心凸顯 + 虛線 Å 數值 + 絕對編號文字標註)
+      // 6. 結合區特寫模式 (純淨高亮 + 虛線與 Å 標註 + 3D Shape 文字標籤)
       if (appState.isFocusingInterface) {
-        // 關鍵 Lys (Lys114, Lys117)
+        // 關鍵殘基 (Licorice 棒狀)
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
@@ -979,18 +1011,27 @@
             multipleBond: 'off'
           });
 
-          // 絕對殘基位置標籤 (Lys114, Lys117)
-          appState.component.addRepresentation('label', {
-            sele: `${appState.contactProtSele} and .CA`,
-            labelType: 'format',
-            labelFormat: '%(resname)s%(resno)s',
-            color: '#38bdf8',
-            scale: 1.35,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            backgroundColor: '#0b0f19',
-            backgroundOpacity: 0.85
-          });
+          // 使用 NGL.Shape 直接在 3D 空間繪製文字，完全隔絕 NGL label 的 PDB 編號回退
+          if (appState.focusLabelsData && appState.focusLabelsData.length > 0) {
+            const textShape = new NGL.Shape("focus_labels");
+            const structure = appState.component.structure;
+
+            appState.focusLabelsData.forEach(item => {
+              const atomProxy = structure.getAtomProxy(item.atomIndex);
+              if (atomProxy) {
+                // 將文字放置在 CA 原子的稍微上方偏離處
+                textShape.addText(
+                  [atomProxy.x, atomProxy.y + 1.2, atomProxy.z],
+                  [0.22, 0.74, 0.97], // #38bdf8 青藍色
+                  1.6,                // 文字大小
+                  item.text           // 嚴格印出計算後的字串 (如 "Lys114", "Lys117")
+                );
+              }
+            });
+
+            appState.focusLabelsShapeComp = appState.stage.addComponentFromObject(textShape);
+            appState.focusLabelsShapeComp.addRepresentation("buffer");
+          }
         }
 
         // 接觸之 DNA 殘基
@@ -1008,7 +1049,7 @@
         if (appState.distanceAtomPairs && appState.distanceAtomPairs.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.distanceAtomPairs,
-            color: '#facc15',        // 金黃色虛線
+            color: '#facc15',
             radius: 0.08,
             dashLength: 0.2,
             labelUnit: 'angstrom',
