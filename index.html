@@ -66,7 +66,7 @@
   <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
     <!-- 鹼基顏色圖例 -->
-<div id="base-legend" class="fixed bottom-6 sm:bottom-20 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
+    <div id="base-legend" class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
       <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1 flex items-center justify-between">
         <span>DNA BASES (VMD)</span>
       </div>
@@ -110,7 +110,7 @@
 
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-2 pointer-events-auto">
-      <button id="btn-focus-interface" title="特寫核心結合口袋 (局部接觸側鏈與鹼基)" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
+      <button id="btn-focus-interface" title="特寫 K24/K27 與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
         <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
         <span id="focus-btn-text">結合區特寫</span>
       </button>
@@ -259,6 +259,13 @@
   </footer>
 
   <script>
+    const AA_MAP = {
+      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C', 'CYM': 'C', 'CYX': 'C',
+      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'HID': 'H', 'HIE': 'H', 'HIP': 'H',
+      'ILE': 'I', 'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P', 'SER': 'S',
+      'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
+    };
+
     const appState = {
       stage: null,
       component: null,
@@ -285,9 +292,14 @@
       dnaStrandSelections: [],
       dnaRungStubs: [],
       ladderShapeComp: null,
+      
+      // 動態鎖定的關鍵殘基與接觸原子
+      keyLysResnos: [],          // [k24_resno, k27_resno]
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
+      distanceAtomPairs: [],     // [[atomIdx1, atomIdx2], ...]
+      
       zincAtomIndex: -1,
       isLoadingFile: false
     };
@@ -394,13 +406,13 @@
       return { colorScheme: colorVal };
     }
 
-    /* ===== 自訂二級結構配色 (螺旋 / 摺疊 / Loop 各自一色；β 股由 N→C 淺→深表示方向) ===== */
+    /* ===== 自訂二級結構配色 ===== */
     function registerSSColorSchemes() {
       const rgb = c => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
       const toInt = v => (Math.round(v[0]) << 16) | (Math.round(v[1]) << 8) | Math.round(v[2]);
       const make = (helix, sheet, loop) => {
-        const light = rgb(sheet).map(v => v + (255 - v) * 0.65); // N 端：偏白淡色
-        const dark = rgb(sheet).map(v => v * 0.78);               // C 端：飽和偏深
+        const light = rgb(sheet).map(v => v + (255 - v) * 0.65);
+        const dark = rgb(sheet).map(v => v * 0.78);
         return function () {
           this.atomColor = function (atom) {
             const ss = atom.sstruc;
@@ -414,14 +426,12 @@
           };
         };
       };
-      // addScheme 會回傳實際可用的 scheme id，必須用它而不是 label
       appState.ssSchemeIds = {
         pymol_ss: NGL.ColormakerRegistry.addScheme(make(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
         af_ss: NGL.ColormakerRegistry.addScheme(make(0xFF4D8D, 0xFFC400, 0xFFFFFF), 'af_ss')
       };
     }
 
-    // 每條 β 股內：N 端 t=0 → C 端 t=1，用來做「淺→深」方向漸層
     function computeStrandEnds() {
       const st = appState.component.structure;
       const map = new Map();
@@ -443,9 +453,6 @@
       appState.strandT = map;
     }
 
-    /* ===== β 股箭頭：攔截 NGL cartoon 的「曲線粗細」陣列 =====
-       NGL 帶狀截面 = size × (aspectRatio·cos, sin)，寬與厚都由 size 決定。
-       這裡在每條 β 股的 C 端把 size 先放大再線性縮小，形成箭頭。 */
     function installArrowPatch() {
       try {
         const Cart = NGL.RepresentationRegistry.get('cartoon');
@@ -460,17 +467,17 @@
             try {
               const size = out.size, m = this.subdiv, n = polymer.residueCount;
               const st = polymer.structure, rp = st.getResidueProxy();
-              const HEAD = 1.8; // 箭頭起點相對寬度
+              const HEAD = 1.8;
               let runStart = -1;
               for (let r = 0; r <= n; r++) {
                 let isE = false;
                 if (r < n) { rp.index = polymer.residueIndexStart + r; isE = (rp.sstruc === 'e' || rp.sstruc === 'b'); }
                 if (isE) { if (runStart < 0) runStart = r; continue; }
                 if (runStart >= 0) {
-                  const b = r - 1;                         // 這條 β 股的最後一個殘基
+                  const b = r - 1;
                   if (b - runStart >= 1) {
-                    const i0 = (b - 1) * m + Math.floor(m / 2);       // 箭頭起點
-                    const i1 = Math.min(size.length - 1, b * m + Math.floor(m / 2)); // 箭頭尖端
+                    const i0 = (b - 1) * m + Math.floor(m / 2);
+                    const i1 = Math.min(size.length - 1, b * m + Math.floor(m / 2));
                     const S = size[b * m] * HEAD;
                     const tipRef = (b + 1) * m < size.length ? size[Math.min(size.length - 1, (b + 1) * m)] : size[b * m] * 0.1;
                     const tip = Math.min(tipRef, S * 0.3);
@@ -488,7 +495,6 @@
       } catch (e) { console.warn('無法安裝箭頭修補', e); }
     }
 
-    /* ===== Kabsch-Sander DSSP (簡化為 螺旋 h / 摺疊 e / Loop c 三態) ===== */
     function computeDSSP(structure) {
       const R = [];
       structure.eachResidue(r => {
@@ -505,18 +511,16 @@
       const n = R.length;
       const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-      // 相鄰殘基是否以胜肽鍵相連
       const link = new Array(n).fill(false);
       for (let i = 0; i < n - 1; i++) {
         link[i] = R[i].chain === R[i + 1].chain && dist(R[i].C, R[i + 1].N) < 2.5;
       }
-      const contiguous = (a, b) => { // a..b 之間全部相連
+      const contiguous = (a, b) => {
         if (a < 0 || b >= n) return false;
         for (let k = a; k < b; k++) if (!link[k]) return false;
         return true;
       };
 
-      // 醯胺 H 原子位置
       for (let i = 1; i < n; i++) {
         if (!link[i - 1] || R[i].pro) continue;
         const c = R[i - 1].C, o = R[i - 1].O;
@@ -525,8 +529,7 @@
         R[i].H = [R[i].N[0] + dx / l, R[i].N[1] + dy / l, R[i].N[2] + dz / l];
       }
 
-      // 氫鍵：CO(a) → NH(d)
-      const acc = Array.from({ length: n }, () => new Set()); // acc[d] = 與 NH(d) 成鍵的 a
+      const acc = Array.from({ length: n }, () => new Set());
       for (let d = 0; d < n; d++) {
         if (!R[d].H) continue;
         for (let a = 0; a < n; a++) {
@@ -538,11 +541,10 @@
           if (E < -0.5) acc[d].add(a);
         }
       }
-      const hb = (a, d) => a >= 0 && d >= 0 && a < n && d < n && acc[d].has(a); // CO(a)→NH(d)
+      const hb = (a, d) => a >= 0 && d >= 0 && a < n && d < n && acc[d].has(a);
 
       const ss = new Array(n).fill('c');
 
-      // n-turn 螺旋 (G=3, H=4, I=5)；優先順序 H > E > G > I
       const markHelix = (turn, ch) => {
         const t = new Array(n).fill(false);
         for (let i = 0; i + turn < n; i++) t[i] = contiguous(i, i + turn) && hb(i, i + turn);
@@ -553,9 +555,8 @@
       markHelix(5, 'i');
       markHelix(3, 'g');
 
-      // β-bridge → ladder → E
       const E = new Array(n).fill(false);
-      const bridges = []; // [i, j, 'p'|'a']
+      const bridges = [];
       for (let i = 1; i < n - 1; i++) {
         if (!contiguous(i - 1, i + 1)) continue;
         for (let j = i + 3; j < n - 1; j++) {
@@ -574,13 +575,11 @@
           E[i] = E[j] = true;
         }
       });
-      // 一個殘基的凸起 (bulge)：夾在兩個 E 之間補成 E
       for (let i = 1; i < n - 1; i++) if (!E[i] && E[i - 1] && E[i + 1] && link[i - 1] && link[i]) E[i] = true;
       for (let i = 0; i < n; i++) if (E[i]) ss[i] = 'e';
 
-      markHelix(4, 'h'); // α 螺旋最優先，覆蓋 E
+      markHelix(4, 'h');
 
-      // 轉為三態並濾掉過短片段
       const tri = ss.map(c => (c === 'h' || c === 'g' || c === 'i') ? 'h' : (c === 'e' ? 'e' : 'c'));
       const minLen = { h: 4, e: 2 };
       for (let i = 0; i < n;) {
@@ -596,7 +595,7 @@
       if (!appState.component) return;
       const st = appState.component.structure;
       const store = st.residueStore;
-      if (!store || !store.sstruc) { console.warn('residueStore.sstruc 不存在，略過二級結構重算'); return; }
+      if (!store || !store.sstruc) return;
       if (!appState.origSS) appState.origSS = new Uint8Array(store.sstruc);
       if (appState.ssMode === 'file') {
         store.sstruc.set(appState.origSS);
@@ -605,23 +604,22 @@
       }
       try {
         const result = computeDSSP(st);
-        // 蛋白質殘基先全部歸零成 Loop，再寫入判定結果
         st.eachResidue(r => { if (r.isProtein()) store.sstruc[r.index] = 'c'.charCodeAt(0); });
         result.forEach(({ index, ss }) => { store.sstruc[index] = ss.charCodeAt(0); });
       } catch (e) {
-        console.error('DSSP 計算失敗，改用原本判定', e);
         store.sstruc.set(appState.origSS);
       }
       computeStrandEnds();
     }
 
     /**
-     * 動態分析結構：僅處理 DNA 分股、短柱座標與結合口袋 (完全通用，不涉入蛋白質二級結構)
+     * 動態分析結構：以 WRKYGQK 為基準尋找 K24 與 K27，並鎖定與其接觸的 DNA 原子與殘基
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
       let zincIdx = -1;
 
+      // 1. 蒐集核酸與鋅離子
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -642,11 +640,9 @@
               p = { x: a.x, y: a.y, z: a.z };
               backboneAtom = a.index;
             }
-
             if (!backboneAtom && (aname === "C4'" || aname === "C3'" || aname === "C1'")) {
               backboneAtom = a.index;
             }
-
             if (aname === "N1" || aname === "N3" || aname === "C4") {
               if (!baseRing || aname === "N1" || aname === "N3") {
                 baseRing = a.index;
@@ -654,12 +650,8 @@
             }
           });
 
-          if (!backboneAtom) {
-            r.eachAtom(a => { if (!backboneAtom) backboneAtom = a.index; });
-          }
-          if (!baseRing) {
-            baseRing = backboneAtom;
-          }
+          if (!backboneAtom) r.eachAtom(a => { if (!backboneAtom) backboneAtom = a.index; });
+          if (!baseRing) baseRing = backboneAtom;
 
           nucleicResList.push({
             resno: r.resno,
@@ -674,92 +666,178 @@
 
       appState.zincAtomIndex = zincIdx;
 
-      if (nucleicResList.length === 0) {
-        appState.dnaStrandSelections = [];
-        appState.dnaRungStubs = [];
-        return;
-      }
+      // DNA 分股處理
+      if (nucleicResList.length > 0) {
+        const strandGroups = [];
+        let curGroup = [nucleicResList[0]];
 
-      // 依據前後殘基距離分股
-      const strandGroups = [];
-      let curGroup = [nucleicResList[0]];
-
-      for (let i = 0; i < nucleicResList.length - 1; i++) {
-        const r1 = nucleicResList[i];
-        const r2 = nucleicResList[i + 1];
-
-        let dist = 999;
-        if (r1.o3 && r2.p) {
-          const dx = r1.o3.x - r2.p.x;
-          const dy = r1.o3.y - r2.p.y;
-          const dz = r1.o3.z - r2.p.z;
-          dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        }
-
-        if (dist > 4.5 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
-          strandGroups.push(curGroup);
-          curGroup = [r2];
-        } else {
-          curGroup.push(r2);
-        }
-      }
-      if (curGroup.length > 0) strandGroups.push(curGroup);
-
-      appState.dnaStrandSelections = strandGroups.map(grp => {
-        const minR = grp[0].resno;
-        const maxR = grp[grp.length - 1].resno;
-        return `(${minR}-${maxR} and not protein and not hydrogen)`;
-      });
-
-      appState.dnaRungStubs = nucleicResList.map(item => ({
-        anchor: item.c1Index,
-        target: item.ringIndex,
-        resname: item.resname,
-        resno: item.resno
-      }));
-
-      // 結合口袋計算
-      const protCoords = [];
-      const dnaCoords = [];
-
-      structure.eachAtom(a => {
-        if (a.element === 'H' || a.index === zincIdx) return;
-        const rname = (a.resname || '').trim().toUpperCase();
-        const isDna = a.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
-        const isProt = a.isProtein() && !isDna;
-
-        if (isProt) protCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
-        else if (isDna) dnaCoords.push({ resno: a.resno, x: a.x, y: a.y, z: a.z });
-      });
-
-      const contactP = new Set();
-      const contactD = new Set();
-      const cutoffSq = 3.5 * 3.5;
-
-      for (let i = 0; i < protCoords.length; i++) {
-        const p = protCoords[i];
-        for (let j = 0; j < dnaCoords.length; j++) {
-          const d = dnaCoords[j];
-          const dx = p.x - d.x;
-          const dy = p.y - d.y;
-          const dz = p.z - d.z;
-          if (dx * dx + dy * dy + dz * dz <= cutoffSq) {
-            contactP.add(p.resno);
-            contactD.add(d.resno);
+        for (let i = 0; i < nucleicResList.length - 1; i++) {
+          const r1 = nucleicResList[i];
+          const r2 = nucleicResList[i + 1];
+          let dist = 999;
+          if (r1.o3 && r2.p) {
+            const dx = r1.o3.x - r2.p.x;
+            const dy = r1.o3.y - r2.p.y;
+            const dz = r1.o3.z - r2.p.z;
+            dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          }
+          if (dist > 4.5 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
+            strandGroups.push(curGroup);
+            curGroup = [r2];
+          } else {
+            curGroup.push(r2);
           }
         }
+        if (curGroup.length > 0) strandGroups.push(curGroup);
+
+        appState.dnaStrandSelections = strandGroups.map(grp => {
+          const minR = grp[0].resno;
+          const maxR = grp[grp.length - 1].resno;
+          return `(${minR}-${maxR} and not protein and not hydrogen)`;
+        });
+
+        appState.dnaRungStubs = nucleicResList.map(item => ({
+          anchor: item.c1Index,
+          target: item.ringIndex,
+          resname: item.resname,
+          resno: item.resno
+        }));
       }
 
-      const pArr = Array.from(contactP);
-      const dArr = Array.from(contactD);
+      // 2. 以 WRKYGQK 為基準尋找 K24 與 K27
+      const protResList = [];
+      structure.eachResidue(r => {
+        if (r.isProtein()) {
+          const rn = (r.resname || '').trim().toUpperCase();
+          protResList.push({
+            resno: r.resno,
+            resname: rn,
+            code: AA_MAP[rn] || 'X',
+            index: r.index
+          });
+        }
+      });
 
-      appState.contactProtSele = pArr.length > 0 ? `(${pArr.join(' or ')}) and protein and sidechain and not hydrogen` : 'none';
-      appState.contactDnaSele = dArr.length > 0 ? `(${dArr.join(' or ')}) and not protein and not backbone and not hydrogen` : 'none';
-      appState.focusViewSele = (pArr.length > 0 || dArr.length > 0) ? [...pArr, ...dArr].join(' or ') : 'nucleic';
+      const seqStr = protResList.map(x => x.code).join('');
+      const motifIdx = seqStr.indexOf('WRKYGQK');
+
+      let k24Res = null;
+      let k27Res = null;
+
+      if (motifIdx !== -1) {
+        // 從 WRKYGQK 往 C 端尋找 Lysine
+        const lysDownstream = [];
+        for (let i = motifIdx + 6; i < protResList.length; i++) {
+          if (protResList[i].code === 'K') {
+            lysDownstream.push(protResList[i]);
+          }
+        }
+        // K24 為第 1 個 (或 WRKYGQK 本身結尾的 K 之後的第 1 個)，K27 為接續的 Lys
+        if (lysDownstream.length >= 2) {
+          k24Res = lysDownstream[0];
+          k27Res = lysDownstream[1];
+        } else if (lysDownstream.length === 1) {
+          k24Res = lysDownstream[0];
+        }
+      }
+
+      // 備案：若基序推算不完全，依絕對編號或最近的 Lys 回退判定
+      if (!k24Res) k24Res = protResList.find(r => r.resno === 24 && r.code === 'K');
+      if (!k27Res) k27Res = protResList.find(r => r.resno === 27 && r.code === 'K');
+
+      appState.keyLysResnos = [];
+      if (k24Res) appState.keyLysResnos.push(k24Res.resno);
+      if (k27Res) appState.keyLysResnos.push(k27Res.resno);
+
+      // 3. 取得 K24 與 K27 的特定原子以計算氫鍵與測距
+      let k24_nz = null;
+      let k27_n = null;
+
+      structure.eachAtom(a => {
+        const an = a.atomname.trim();
+        if (k24Res && a.resno === k24Res.resno && an === 'NZ') {
+          k24_nz = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
+        }
+        if (k27Res && a.resno === k27Res.resno && an === 'N') {
+          k27_n = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
+        }
+      });
+
+      // 4. 尋找與 K24 (大溝鹼基) 與 K27 (磷酸骨架) 形成接觸的 DNA 原子
+      const contactedDnaResnos = new Set();
+      const distPairs = [];
+
+      // K24 NZ -> 最近的大溝受體 (N7, O4, O6, N4)
+      if (k24_nz) {
+        let bestTarget = null;
+        let minD2 = 4.2 * 4.2; // 寬鬆上限，避免因波動完全斷線
+        structure.eachAtom(a => {
+          if (!a.isNucleic()) return;
+          const an = a.atomname.trim();
+          if (['N7', 'O4', 'O6', 'N4'].includes(an)) {
+            const dx = a.x - k24_nz.x;
+            const dy = a.y - k24_nz.y;
+            const dz = a.z - k24_nz.z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < minD2) {
+              minD2 = d2;
+              bestTarget = { index: a.index, resno: a.resno, dist: Math.sqrt(d2) };
+            }
+          }
+        });
+        if (bestTarget) {
+          contactedDnaResnos.add(bestTarget.resno);
+          distPairs.push([k24_nz.index, bestTarget.index]);
+        }
+      }
+
+      // K27 N -> 最近的骨架磷酸根氧 (OP1, OP2, O1P, O2P)
+      if (k27_n) {
+        let bestTarget = null;
+        let minD2 = 4.0 * 4.0;
+        structure.eachAtom(a => {
+          if (!a.isNucleic()) return;
+          const an = a.atomname.trim();
+          if (['OP1', 'OP2', 'O1P', 'O2P'].includes(an)) {
+            const dx = a.x - k27_n.x;
+            const dy = a.y - k27_n.y;
+            const dz = a.z - k27_n.z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < minD2) {
+              minD2 = d2;
+              bestTarget = { index: a.index, resno: a.resno, dist: Math.sqrt(d2) };
+            }
+          }
+        });
+        if (bestTarget) {
+          contactedDnaResnos.add(bestTarget.resno);
+          distPairs.push([k27_n.index, bestTarget.index]);
+        }
+      }
+
+      // 設定特寫 Selection 語法
+      if (appState.keyLysResnos.length > 0) {
+        appState.contactProtSele = `(${appState.keyLysResnos.join(' or ')}) and protein and not hydrogen`;
+      } else {
+        appState.contactProtSele = 'none';
+      }
+
+      const dResArr = Array.from(contactedDnaResnos);
+      if (dResArr.length > 0) {
+        appState.contactDnaSele = `(${dResArr.join(' or ')}) and not protein and not hydrogen`;
+      } else {
+        appState.contactDnaSele = 'none';
+      }
+
+      appState.focusViewSele = [...appState.keyLysResnos, ...dResArr].length > 0
+        ? [...appState.keyLysResnos, ...dResArr].join(' or ')
+        : 'nucleic';
+
+      appState.distanceAtomPairs = distPairs;
     }
 
     /**
-     * 重建所有 Representation (還原為原生預設)
+     * 重建所有 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -775,18 +853,17 @@
       const pColorParams = getColorParams(appState.protColor);
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 1. 蛋白質主體：原生單一連續表示法
+      // 1. 蛋白質主體
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
-
       if (pRep === 'cartoon') {
         appState.component.addRepresentation('cartoon', {
           sele: protSele,
           ...pColorParams,
-          aspectRatio: 5,       // 摺疊/螺旋帶狀寬扁比
-          subdiv: 12,           // 曲線細分，更平滑
+          aspectRatio: 5,
+          subdiv: 12,
           radialSegments: 20,
           capped: true,
-          smoothSheet: true     // 摺疊拉直
+          smoothSheet: true
         });
       } else if (pRep === 'tube') {
         appState.component.addRepresentation('tube', {
@@ -823,11 +900,6 @@
 
       // 3. DNA 階梯橫竿 (VMD 圓頭短柱)
       if (dRep === 'vmd_ladder') {
-        if (appState.ladderShapeComp) {
-          appState.stage.removeComponent(appState.ladderShapeComp);
-          appState.ladderShapeComp = null;
-        }
-
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
           const shape = new NGL.Shape("vmd_rungs");
           const structure = appState.component.structure;
@@ -853,7 +925,6 @@
 
             if (aBackbone && aBase) {
               const color = parseBaseColor(stub.resname);
-
               const dx = aBase.x - aBackbone.x;
               const dy = aBase.y - aBackbone.y;
               const dz = aBase.z - aBackbone.z;
@@ -868,12 +939,8 @@
                 const startY = aBackbone.y + uy * 1.2;
                 const startZ = aBackbone.z + uz * 1.2;
 
-                const endX = aBase.x;
-                const endY = aBase.y;
-                const endZ = aBase.z;
-
-                shape.addCylinder([startX, startY, startZ], [endX, endY, endZ], color, stubRadius);
-                shape.addSphere([endX, endY, endZ], color, stubRadius);
+                shape.addCylinder([startX, startY, startZ], [aBase.x, aBase.y, aBase.z], color, stubRadius);
+                shape.addSphere([aBase.x, aBase.y, aBase.z], color, stubRadius);
               }
             }
           });
@@ -916,34 +983,60 @@
         });
       }
 
-      // 6. 結合區特寫模式
+      // 6. 結合區特寫模式 (精確顯示 K24, K27 與 DNA 接觸殘基 + 虛線與 Å 距離標註)
       if (appState.isFocusingInterface) {
+        // 蛋白質關鍵 Lys (K24, K27)
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
             colorScheme: 'element',
-            radius: 0.25,
+            radius: 0.24,
             multipleBond: 'off'
+          });
+
+          // 標註 LYS 殘基名稱與編號
+          appState.component.addRepresentation('label', {
+            sele: `${appState.contactProtSele} and .CA`,
+            labelType: 'format',
+            labelFormat: '%(resname)s%(resno)s',
+            color: '#38bdf8',
+            scale: 1.3,
+            fontWeight: 'bold',
+            fontFamily: 'monospace'
           });
         }
 
+        // 接觸之 DNA 殘基 (整座核苷酸變為 licorice)
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
             colorScheme: 'element',
-            radius: 0.25,
+            radius: 0.22,
             multipleBond: 'off'
+          });
+        }
+
+        // 繪製氫鍵接觸虛線與 Ångström 數值
+        if (appState.distanceAtomPairs && appState.distanceAtomPairs.length > 0) {
+          appState.component.addRepresentation('distance', {
+            atomPair: appState.distanceAtomPairs,
+            color: '#facc15',        // 金黃色虛線
+            radius: 0.08,
+            dashLength: 0.2,
+            labelUnit: 'angstrom',
+            labelColor: '#fef08a',
+            labelSize: 1.4,
+            labelBackground: true,
+            labelBackgroundColor: '#0b0f19',
+            labelBackgroundMargin: 0.1
           });
         }
       }
 
       const legendEl = document.getElementById('base-legend');
       if (legendEl) {
-        if (dRep === 'vmd_ladder') {
-          legendEl.classList.remove('hidden');
-        } else {
-          legendEl.classList.add('hidden');
-        }
+        if (dRep === 'vmd_ladder') legendEl.classList.remove('hidden');
+        else legendEl.classList.add('hidden');
       }
     }
 
@@ -951,6 +1044,8 @@
       if (!appState.component) return;
       appState.isFocusingInterface = !appState.isFocusingInterface;
 
+      // 每次切換特寫時重新計算幾何距離以確保在當前 frame 精確配對
+      analyzeStructureDynamically(appState.component.structure);
       applyAllRepresentations();
 
       if (appState.isFocusingInterface) {
@@ -986,7 +1081,9 @@
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
 
-      if (appState.dnaStyle === 'vmd_ladder') {
+      // 特寫模式下或階梯模式下即時更新幾何
+      if (appState.isFocusingInterface || appState.dnaStyle === 'vmd_ladder') {
+        analyzeStructureDynamically(appState.component.structure);
         applyAllRepresentations();
       }
     }
@@ -1056,9 +1153,6 @@
       lucide.createIcons();
     }
 
-    /**
-     * 載入 PDB 檔案 (原生簡潔模式)
-     */
     async function loadPdbFile(url) {
       if (appState.isLoadingFile) return;
       appState.isLoadingFile = true;
@@ -1078,7 +1172,6 @@
         appState.component = comp;
         appState.origSS = null;
 
-        // 僅修正 Amber 非標準殘基名稱，使 NGL 辨識胜肽主鏈
         comp.structure.eachResidue(r => {
           const rn = (r.resname || '').trim().toUpperCase();
           if (rn === 'CYM') r.resname = 'CYS';
@@ -1199,20 +1292,15 @@
         dom.repModal.classList.toggle('hidden');
         const legend = document.getElementById('base-legend');
         if (legend && appState.dnaStyle === 'vmd_ladder') {
-          if (!dom.repModal.classList.contains('hidden')) {
-            legend.classList.add('hidden');
-          } else {
-            legend.classList.remove('hidden');
-          }
+          if (!dom.repModal.classList.contains('hidden')) legend.classList.add('hidden');
+          else legend.classList.remove('hidden');
         }
       });
 
       dom.btnCloseRep.addEventListener('click', () => {
         dom.repModal.classList.add('hidden');
         const legend = document.getElementById('base-legend');
-        if (legend && appState.dnaStyle === 'vmd_ladder') {
-          legend.classList.remove('hidden');
-        }
+        if (legend && appState.dnaStyle === 'vmd_ladder') legend.classList.remove('hidden');
       });
 
       dom.proteinStyleSelect.addEventListener('change', (e) => {
