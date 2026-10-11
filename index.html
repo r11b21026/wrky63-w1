@@ -798,29 +798,19 @@ if (k114_nz) {
   });
 }
 
-      // Lys117 N -> 骨架磷酸根氧 (OP1, OP2, O1P, O2P)
-      if (k117_n) {
-        let bestTarget = null;
-        let minD2 = 4.0 * 4.0;
-        structure.eachAtom(a => {
-          if (!a.isNucleic()) return;
-          const an = a.atomname.trim();
-          if (['OP1', 'OP2', 'O1P', 'O2P'].includes(an)) {
-            const dx = a.x - k117_n.x;
-            const dy = a.y - k117_n.y;
-            const dz = a.z - k117_n.z;
-            const d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < minD2) {
-              minD2 = d2;
-              bestTarget = { index: a.index, resno: a.resno, dist: Math.sqrt(d2) };
-            }
-          }
-        });
-        if (bestTarget) {
-          contactedDnaResnos.add(bestTarget.resno);
-          distPairs.push([k117_n.index, bestTarget.index]);
-        }
+if (k117_n) {
+  structure.eachAtom(a => {
+    if (!a.isNucleic()) return;
+    const an = a.atomname.trim();
+    if (['OP1', 'OP2', 'O1P', 'O2P'].includes(an)) {
+      const dx = a.x - k117_n.x, dy = a.y - k117_n.y, dz = a.z - k117_n.z;
+      if (dx*dx + dy*dy + dz*dz < 3.5 * 3.5) {
+        contactedDnaResnos.add(a.resno);
+        distPairs.push([k117_n.index, a.index]);
       }
+    }
+  });
+}
 
       appState.contactProtSele = `(${targetPdbResnos.join(' or ')}) and protein and not hydrogen`;
 
