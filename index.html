@@ -780,29 +780,23 @@
       const contactedDnaResnos = new Set();
       const distPairs = [];
 
-      // Lys114 NZ -> 大溝鹼基受體 (N7, O4, O6, N4)
-      if (k114_nz) {
-        let bestTarget = null;
-        let minD2 = 4.2 * 4.2;
-        structure.eachAtom(a => {
-          if (!a.isNucleic()) return;
-          const an = a.atomname.trim();
-          if (['N7', 'O4', 'O6', 'N4'].includes(an)) {
-            const dx = a.x - k114_nz.x;
-            const dy = a.y - k114_nz.y;
-            const dz = a.z - k114_nz.z;
-            const d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < minD2) {
-              minD2 = d2;
-              bestTarget = { index: a.index, resno: a.resno, dist: Math.sqrt(d2) };
-            }
-          }
-        });
-        if (bestTarget) {
-          contactedDnaResnos.add(bestTarget.resno);
-          distPairs.push([k114_nz.index, bestTarget.index]);
-        }
+      // Lys114 NZ -> 大溝鹼基受體 (N7, O4, O6)，收集全部 < 3.5 Å 的，不只最近的一個
+if (k114_nz) {
+  structure.eachAtom(a => {
+    if (!a.isNucleic()) return;
+    const an = a.atomname.trim();
+    if (['N7', 'O4', 'O6'].includes(an)) {
+      const dx = a.x - k114_nz.x;
+      const dy = a.y - k114_nz.y;
+      const dz = a.z - k114_nz.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < 3.5 * 3.5) {
+        contactedDnaResnos.add(a.resno);
+        distPairs.push([k114_nz.index, a.index]);
       }
+    }
+  });
+}
 
       // Lys117 N -> 骨架磷酸根氧 (OP1, OP2, O1P, O2P)
       if (k117_n) {
