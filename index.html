@@ -140,7 +140,7 @@
     <div class="flex items-center space-x-1.5 pointer-events-auto shrink-0">
       <button id="btn-focus-interface" title="接觸區嚴謹氫鍵/鹽橋分析" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
         <i data-lucide="focus" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
-        <span id="focus-btn-text">接觸面</span>
+        <span id="focus-btn-text">特寫</span>
       </button>
 
       <button id="btn-toggle-rep" title="樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 p-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition">
@@ -181,8 +181,8 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
-            <option value="pymol_ss" selected>二級結構 (紅/黃/綠)</option>
-            <option value="element">Element (CPK 原子顏色)</option>
+            <option value="pymol_ss" selected>二級結構（Helix 紅 / Sheet 黃 / Loop 綠）</option>
+            <option value="element">Element CPK </option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">青藍 (Cyan)</option>
             <option value="#ef4444">紅色 (Red)</option>
