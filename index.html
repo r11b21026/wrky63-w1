@@ -701,8 +701,8 @@
       return Math.acos(dot) * (180.0 / Math.PI);
     }
 
-    /**
-     * 動態全接觸分析（結合幾何角度真氫鍵與鹽橋判定）
+/**
+     * 動態全接觸分析（修復括號語法錯誤、納入 Lys 旋轉圓錐判斷與幾何角度真氫鍵）
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -823,7 +823,7 @@
       let deltaOffset = 0;
       if (motifIdx !== -1) {
         const wInPdb = protResList[motifIdx].resno;
-        deltaOffset = STANDARD_ANCHOR_W - wInPdb; // delta = 108 - PDB中的W[cite: 1]
+        deltaOffset = STANDARD_ANCHOR_W - wInPdb;
       } else {
         const sampleW = protResList.find(r => r.code === 'W');
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
@@ -885,47 +885,41 @@
             }
           });
 
-// B. 氫鍵判定 (兼顧立體化學嚴謹性與側鏈旋轉自由度)
+          // B. 氫鍵判定 (兼顧立體化學嚴謹性與側鏈旋轉自由度)
           // 情況 1：蛋白質為供體 (Protein Donor: N/O -> DNA Acceptor: O/N)
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
 
-            // 判斷是否為多氫/高旋轉度側鏈供體 (Lys NZ, Arg 胍基等)
             const isFlexibleDonor = ['NZ', 'NH1', 'NH2', 'NE'].includes(pName);
 
-            // 針對剛性供體外推單一虛擬氫
             let virtualH = null;
             if (pAtoms['H']) {
               virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
             } else if (pName === 'N' && pAtoms['CA']) {
-              // 主鏈醯胺：方向由 CA 延伸
               const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
             } else if (pName === 'OG' && pAtoms['CB']) {
-              // Ser 等單氫側鏈
               const vx = pAtom.x - pAtoms['CB'].x, vy = pAtom.y - pAtoms['CB'].y, vz = pAtom.z - pAtoms['CB'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 0.96, pAtom.y + (vy / vl) * 0.96, pAtom.z + (vz / vl) * 0.96];
             }
 
-            // 與 DNA 所有潛在受體比對
             Object.keys(dAtoms).forEach(dName => {
               const dAtom = dAtoms[dName];
               if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
 
               const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
 
-              // 1. 針對 Lys NZ / Arg 等多氫基團：採用距離 + 圓錐半球排除 (避免單一虛擬 H 造成假陰性)
+              // 1. 針對 Lys NZ / Arg 等多氫基團：距離 <= 3.5 Å 且受體不在 C-N 反方向
               if (isFlexibleDonor) {
                 if (distDA <= 3.5) {
                   let isValidAngle = true;
-                  // 若有前驅碳原子 (如 Lys CE)，檢查受體是否在前方半球 (夾角 >= 80°，排除背向碰撞)
                   const prevC = pAtoms['CE'] || pAtoms['CZ'] || pAtoms['CD'];
                   if (prevC) {
                     const coneAngle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], [pAtom.x, pAtom.y, pAtom.z], [prevC.x, prevC.y, prevC.z]);
-                    if (coneAngle < 80.0) isValidAngle = false; // 受體在 C-N 鍵的後方反向
+                    if (coneAngle < 80.0) isValidAngle = false;
                   }
                   if (isValidAngle) {
                     contactedDnaResnos.add(dRes.resno);
@@ -935,7 +929,7 @@
                 return;
               }
 
-              // 2. 針對主鏈或剛性供體：嚴格檢查 D-H..A 夾角 >= 120°
+              // 2. 針對主鏈或剛性供體：檢查 D-H..A 夾角 >= 120°
               if (distDA <= 3.6) {
                 if (virtualH) {
                   const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
@@ -986,6 +980,8 @@
               }
             });
           });
+        });
+      });
 
       appState.contactProtSele = targetPdbResnos.length > 0 
         ? `(${targetPdbResnos.join(' or ')}) and protein and not hydrogen` 
