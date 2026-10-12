@@ -181,7 +181,7 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
           <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
-            <option value="pymol_ss" selected>二級結構 (PyMOL 紅/黃/綠)</option>
+            <option value="pymol_ss" selected>二級結構 (紅/黃/綠)</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
             <option value="#38bdf8">青藍 (Cyan)</option>
@@ -219,7 +219,6 @@
           <label class="block text-[11px] text-slate-400 mb-1">骨架顏色</label>
           <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
             <option value="#7dd3fc" selected>水藍色 (Classic Cyan)</option>
-            <option value="dna_resname">鹼基色同調 (A藍/T紅/C橘/G綠)</option>
             <option value="#cbd5e1">純淨銀白</option>
             <option value="element">Element CPK</option>
             <option value="#f97316">亮橘 (Orange)</option>
@@ -506,7 +505,6 @@
 
       appState.ssSchemeIds = {
         pymol_ss: NGL.ColormakerRegistry.addScheme(makeSS(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
-        dna_resname: NGL.ColormakerRegistry.addScheme(makeDnaResname(), 'dna_resname')
       };
     }
 
@@ -1252,7 +1250,7 @@
       } else {
         appState.component.autoView(600);
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '接觸面';
+        dom.focusBtnText.textContent = '特寫';
       }
     }
 
