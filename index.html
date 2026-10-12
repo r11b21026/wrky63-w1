@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>WRKY63 - FLC W-box HADDOCK 對接與分子動態播放器</title>
+  <title>WRKY63 與 DNA 結合展示</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide 圖示庫 -->
@@ -47,6 +47,18 @@
       box-shadow: 0 10px 30px 0 rgba(0, 0, 0, 0.55);
     }
 
+    optgroup {
+      background-color: #0f172a;
+      color: #38bdf8;
+      font-weight: bold;
+    }
+
+    option {
+      background-color: #1e293b;
+      color: #f1f5f9;
+      font-weight: normal;
+    }
+
     input[type=range] {
       accent-color: #38bdf8;
     }
@@ -72,24 +84,24 @@
     <!-- 鹼基與鍵結顏色圖例 -->
     <div id="base-legend" class="absolute top-14 right-2 sm:right-4 z-20 vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-[11px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
       <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-0.5 flex items-center justify-between">
-        <span>DNA BASES</span>
+        <span>DNA 鹼基顏色</span>
       </div>
       <div class="grid grid-cols-2 gap-x-2.5 gap-y-0.5">
         <div class="flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full" style="background-color: #3859F2;"></span>
-          <span class="text-slate-200">A <span class="text-[9px] text-slate-400">(Ade)</span></span>
+          <span class="text-slate-200">A <span class="text-[9px] text-slate-400">(腺嘌呤)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full" style="background-color: #EB4759;"></span>
-          <span class="text-slate-200">T <span class="text-[9px] text-slate-400">(Thy)</span></span>
+          <span class="text-slate-200">T <span class="text-[9px] text-slate-400">(胸腺嘧啶)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full" style="background-color: #F29433;"></span>
-          <span class="text-slate-200">C <span class="text-[9px] text-slate-400">(Cyt)</span></span>
+          <span class="text-slate-200">C <span class="text-[9px] text-slate-400">(胞嘧啶)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full" style="background-color: #26CC40;"></span>
-          <span class="text-slate-200">G <span class="text-[9px] text-slate-400">(Gua)</span></span>
+          <span class="text-slate-200">G <span class="text-[9px] text-slate-400">(鳥嘌呤)</span></span>
         </div>
       </div>
       
@@ -101,7 +113,7 @@
         </div>
         <div class="flex items-center space-x-1.5">
           <span class="w-2.5 h-0.5 bg-[#facc15] inline-block rounded"></span>
-          <span class="text-yellow-300">氫鍵 (H-bond, &ge;120&deg;)</span>
+          <span class="text-yellow-300">氫鍵 (H-bond)</span>
         </div>
       </div>
     </div>
@@ -110,12 +122,12 @@
     <div class="vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center space-x-2 pointer-events-auto shadow-lg max-w-[calc(100%-120px)] sm:max-w-md">
       <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2 shrink-0">
         <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-        <span class="font-mono-vmd font-bold text-xs sm:text-sm tracking-wider text-cyan-400 truncate">HADDOCK</span>
+        <span class="font-bold text-xs sm:text-sm tracking-wider text-cyan-400 truncate">結構展示</span>
       </div>
 
       <div class="flex items-center space-x-1.5 min-w-0">
-        <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400 shrink-0"></i>
-        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 w-full truncate cursor-pointer hover:bg-slate-800 transition">
+        <i data-lucide="folder" class="w-3.5 h-3.5 text-cyan-400 shrink-0"></i>
+        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 w-full truncate cursor-pointer hover:bg-slate-800 transition">
           <option value="" disabled selected>搜尋 PDB 檔案中...</option>
         </select>
         <button id="btn-refresh-files" title="重新整理目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition shrink-0">
@@ -193,7 +205,7 @@
 
     <!-- DNA 樣式與配色 -->
     <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
-      <div class="text-xs font-mono-vmd text-amber-400 font-bold mb-1.5">DNA (FLC W-box)</div>
+      <div class="text-xs font-mono-vmd text-amber-400 font-bold mb-1.5">DNA (W-box)</div>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
@@ -206,8 +218,8 @@
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">骨架顏色</label>
           <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
-            <option value="resname" selected>鹼基色同調 (A/T/C/G)</option>
-            <option value="#7dd3fc">經典湖水藍 (Cyan)</option>
+            <option value="#7dd3fc" selected>水藍色 (Classic Cyan)</option>
+            <option value="dna_resname">鹼基色同調 (A藍/T紅/C橘/G綠)</option>
             <option value="#cbd5e1">純淨銀白</option>
             <option value="element">Element CPK</option>
             <option value="#f97316">亮橘 (Orange)</option>
@@ -274,11 +286,10 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // ===== 基準學術編號設定（可自由增減要特別觀察特寫的殘基） =====
-    const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108
-    const TARGET_DISPLAY_RESNOS = [114, 117]; // 欲在特寫區觀察的標準殘基編號清單
+    // 基準學術編號設定 (可隨意增減要追蹤特寫的殘基)
+    const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108[cite: 1]
+    const TARGET_DISPLAY_RESNOS = [114, 117]; // 自訂欲追蹤展示的標準殘基清單[cite: 1]
 
-    // 固定總時間為 100 ns
     const FIXED_TOTAL_NS = 100.0;
 
     const appState = {
@@ -301,7 +312,7 @@
       ssSchemeIds: null,
       strandT: new Map(),
       dnaStyle: 'vmd_ladder',
-      dnaColor: 'resname',
+      dnaColor: '#7dd3fc', // 預設水藍色骨架[cite: 1]
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
@@ -369,12 +380,17 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    function formatPdbDisplayName(rawName) {
-      let clean = rawName.replace(/\.pdb$/i, '');
-      if (/haddock|complex|dock/i.test(clean)) {
-        return `[HADDOCK] WRKY63–FLC (${clean})`;
-      }
-      return `WRKY63–FLC W-box (${clean})`;
+    // 簡潔白話顯示檔名，並過濾掉技術性字眼
+    function formatSimpleFileName(rawName) {
+      return rawName.replace(/\.pdb$/i, '').replace(/[-_]/g, ' ');
+    }
+
+    // 判斷是否為靜態結構 (能量最小化) 或 MD 軌跡
+    function isStaticPdb(name) {
+      const lower = name.toLowerCase();
+      if (/min|em|minimize|dock|complex|model|static/i.test(lower)) return true;
+      if (/traj|md|movie|sim|prod|run|dcd/i.test(lower)) return false;
+      return true; // 預設視為靜態
     }
 
     async function scanFolderFiles() {
@@ -383,7 +399,7 @@
       const urlParams = new URLSearchParams(window.location.search);
       const specifiedFile = urlParams.get('file') || urlParams.get('pdb');
       if (specifiedFile) {
-        dom.fileSelector.innerHTML = `<option value="${specifiedFile}">${formatPdbDisplayName(specifiedFile)}</option>`;
+        dom.fileSelector.innerHTML = `<option value="${specifiedFile}">${formatSimpleFileName(specifiedFile)}</option>`;
         loadPdbFile(specifiedFile);
         return;
       }
@@ -411,14 +427,30 @@
 
       dom.fileSelector.innerHTML = '';
       if (found.length > 0) {
+        const staticGroup = document.createElement('optgroup');
+        staticGroup.label = '靜態結構 (能量最小化)';
+
+        const trajGroup = document.createElement('optgroup');
+        trajGroup.label = '分子動態影片 (MD 模擬軌跡)';
+
+        let firstUrl = found[0].url;
+
         found.forEach(f => {
           const opt = document.createElement('option');
           opt.value = f.url;
-          opt.textContent = formatPdbDisplayName(f.name);
-          dom.fileSelector.appendChild(opt);
+          opt.textContent = formatSimpleFileName(f.name);
+          if (isStaticPdb(f.name)) {
+            staticGroup.appendChild(opt);
+          } else {
+            trajGroup.appendChild(opt);
+          }
         });
+
+        if (staticGroup.children.length > 0) dom.fileSelector.appendChild(staticGroup);
+        if (trajGroup.children.length > 0) dom.fileSelector.appendChild(trajGroup);
+
         hideLoading();
-        loadPdbFile(found[0].url);
+        loadPdbFile(firstUrl);
       } else {
         dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 PDB 檔案 (請加 ?file=檔名.pdb)</option>';
         hideLoading();
@@ -432,10 +464,13 @@
       return { colorScheme: colorVal };
     }
 
-    function registerSSColorSchemes() {
+    // 註冊自訂配色方案
+    function registerCustomColorSchemes() {
       const rgb = c => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
       const toInt = v => (Math.round(v[0]) << 16) | (Math.round(v[1]) << 8) | Math.round(v[2]);
-      const make = (helix, sheet, loop) => {
+
+      // 1. PyMOL 二級結構配色 (螺旋紅/摺疊黃/Loop 綠)[cite: 1]
+      const makeSS = (helix, sheet, loop) => {
         const light = rgb(sheet).map(v => v + (255 - v) * 0.65);
         const dark = rgb(sheet).map(v => v * 0.78);
         return function () {
@@ -451,8 +486,27 @@
           };
         };
       };
+
+      // 2. DNA 鹼基同調配色 (A 藍 / T 紅 / C 橘 / G 綠)
+      const makeDnaResname = () => {
+        const baseColorInt = {
+          'A': 0x3859F2, 'DA': 0x3859F2,
+          'T': 0xEB4759, 'DT': 0xEB4759,
+          'C': 0xF29433, 'DC': 0xF29433,
+          'G': 0x26CC40, 'DG': 0x26CC40,
+          'U': 0xEB4759, 'DU': 0xEB4759
+        };
+        return function () {
+          this.atomColor = function (atom) {
+            const rn = (atom.resname || '').trim().toUpperCase();
+            return baseColorInt[rn] || 0x7dd3fc; // 預設水藍色
+          };
+        };
+      };
+
       appState.ssSchemeIds = {
-        pymol_ss: NGL.ColormakerRegistry.addScheme(make(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss')
+        pymol_ss: NGL.ColormakerRegistry.addScheme(makeSS(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
+        dna_resname: NGL.ColormakerRegistry.addScheme(makeDnaResname(), 'dna_resname')
       };
     }
 
@@ -636,9 +690,7 @@
       computeStrandEnds();
     }
 
-    // 計算空間向量長度、內積與夾角 (度數)
     function calcAngleDeg(pA, pB, pC) {
-      // B 是頂點: 計算 BA 與 BC 夾角
       const v1 = [pA[0] - pB[0], pA[1] - pB[1], pA[2] - pB[2]];
       const v2 = [pC[0] - pB[0], pC[1] - pB[1], pC[2] - pB[2]];
       const l1 = Math.hypot(v1[0], v1[1], v1[2]);
@@ -771,13 +823,13 @@
       let deltaOffset = 0;
       if (motifIdx !== -1) {
         const wInPdb = protResList[motifIdx].resno;
-        deltaOffset = STANDARD_ANCHOR_W - wInPdb;
+        deltaOffset = STANDARD_ANCHOR_W - wInPdb; // delta = 108 - PDB中的W[cite: 1]
       } else {
         const sampleW = protResList.find(r => r.code === 'W');
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      // 3. 取得欲展示之目標殘基
+      // 3. 取得目標殘基
       const targetPdbResnos = [];
       const labelsData = [];
       const targetResnoSet = new Set();
@@ -813,7 +865,6 @@
         if (!pRes) return;
         const pAtoms = pRes.atoms;
 
-        // 遍歷所有 DNA 殘基
         dnaResidueMap.forEach(dRes => {
           const dAtoms = dRes.atoms;
 
@@ -835,38 +886,32 @@
           });
 
           // B. 嚴謹幾何角度氫鍵判定
-          // 情況 1：蛋白質為供體 (Protein Donor: N/O -> DNA Acceptor: O/N)
+          // 情況 1：蛋白質為供體
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
 
-            // 計算蛋白質供體氫座標 (若 PDB 無 H，由相鄰原子外推虛擬氫)
             let virtualH = null;
             if (pAtoms['H']) {
               virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
             } else if (pName === 'N' && pAtoms['CA']) {
-              // 主鏈醯胺氫：外推方向由 CA 延伸
               const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
             } else if (pName === 'NZ' && pAtoms['CE']) {
-              // Lys 側鏈 NZ
               const vx = pAtom.x - pAtoms['CE'].x, vy = pAtom.y - pAtoms['CE'].y, vz = pAtom.z - pAtoms['CE'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
             } else if ((pName === 'NH1' || pName === 'NH2' || pName === 'NE') && pAtoms['CZ']) {
-              // Arg 側鏈
               const vx = pAtom.x - pAtoms['CZ'].x, vy = pAtom.y - pAtoms['CZ'].y, vz = pAtom.z - pAtoms['CZ'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
             } else if (pName === 'OG' && pAtoms['CB']) {
-              // Ser
               const vx = pAtom.x - pAtoms['CB'].x, vy = pAtom.y - pAtoms['CB'].y, vz = pAtom.z - pAtoms['CB'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 0.96, pAtom.y + (vy / vl) * 0.96, pAtom.z + (vz / vl) * 0.96];
             }
 
-            // 與 DNA 所有潛在受體比對
             Object.keys(dAtoms).forEach(dName => {
               const dAtom = dAtoms[dName];
               if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
@@ -876,13 +921,11 @@
                 if (virtualH) {
                   const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
                   const angle = calcAngleDeg([pAtom.x, pAtom.y, pAtom.z], virtualH, [dAtom.x, dAtom.y, dAtom.z]);
-                  // 嚴格判定：D-H..A 夾角 >= 120° 且 H..A <= 2.6 Å
                   if (angle >= 120.0 && distHA <= 2.6) {
                     contactedDnaResnos.add(dRes.resno);
                     hbonds.push([pAtom.index, dAtom.index]);
                   }
                 } else if (distDA <= 3.2) {
-                  // 無法可靠外推 H 時以嚴格距離 cutoff
                   contactedDnaResnos.add(dRes.resno);
                   hbonds.push([pAtom.index, dAtom.index]);
                 }
@@ -890,13 +933,11 @@
             });
           });
 
-          // 情況 2：DNA 為供體 (DNA Base N-H -> Protein Acceptor: O/N)
-          // DNA 鹼基常見供體：Thy N3, Gua N1/N2, Cyt N4, Ade N6
+          // 情況 2：DNA 為供體
           const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
           dnaDonors.forEach(dName => {
             const dAtom = dAtoms[dName];
             if (!dAtom) return;
-            // 外推 DNA 鹼基上的氫 (基於環相鄰碳)
             let adjC = dAtoms['C2'] || dAtoms['C4'] || dAtoms['C6'];
             let vH = null;
             if (adjC) {
@@ -1002,7 +1043,7 @@
         });
       }
       
-      // 2. DNA 骨架
+      // 2. DNA 骨架（預設水藍色 #7dd3fc，若選鹼基色同調則使用自訂 scheme）
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -1482,7 +1523,7 @@
     }
 
     window.addEventListener('load', () => {
-      registerSSColorSchemes();
+      registerCustomColorSchemes();
       installArrowPatch();
       appState.stage = new NGL.Stage('viewport', {
         backgroundColor: '#0b0f19',
