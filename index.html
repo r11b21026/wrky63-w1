@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>VMD 網頁分子動態播放器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>WRKY63 - FLC W-box HADDOCK 對接與分子動態播放器</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide 圖示庫 -->
@@ -21,7 +21,7 @@
       --vmd-cyan: #38bdf8;
     }
 
-    body {
+    html, body {
       font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
       background-color: var(--vmd-bg);
       color: #e2e8f0;
@@ -29,6 +29,10 @@
       -webkit-user-select: none;
       touch-action: none;
       overflow: hidden;
+      width: 100%;
+      height: 100%;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
 
     .font-mono-vmd {
@@ -63,75 +67,87 @@
   </div>
 
   <!-- 頂部資訊列與切換器 -->
-  <header class="absolute top-3 left-3 right-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+  <header class="absolute top-2 left-2 right-2 sm:top-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-    <!-- 鹼基顏色圖例 -->
-    <div id="base-legend" class="absolute top-16 right-3 sm:right-4 z-20 vmd-panel rounded-xl px-3 py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-xs font-mono-vmd bg-slate-950/85 backdrop-blur-md">
-      <div class="text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-1 flex items-center justify-between">
-        <span>DNA BASES (VMD)</span>
+    <!-- 鹼基與鍵結顏色圖例 -->
+    <div id="base-legend" class="absolute top-14 right-2 sm:right-4 z-20 vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex flex-col space-y-1.5 pointer-events-auto border border-slate-700/60 shadow-lg text-[11px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
+      <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-0.5 flex items-center justify-between">
+        <span>DNA BASES</span>
       </div>
-      <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+      <div class="grid grid-cols-2 gap-x-2.5 gap-y-0.5">
         <div class="flex items-center space-x-1.5">
-          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #3859F2;"></span>
-          <span class="text-slate-200">A <span class="text-[10px] text-slate-400">(Ade)</span></span>
+          <span class="w-2 h-2 rounded-full" style="background-color: #3859F2;"></span>
+          <span class="text-slate-200">A <span class="text-[9px] text-slate-400">(Ade)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
-          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #EB4759;"></span>
-          <span class="text-slate-200">T <span class="text-[10px] text-slate-400">(Thy)</span></span>
+          <span class="w-2 h-2 rounded-full" style="background-color: #EB4759;"></span>
+          <span class="text-slate-200">T <span class="text-[9px] text-slate-400">(Thy)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
-          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #F29433;"></span>
-          <span class="text-slate-200">C <span class="text-[10px] text-slate-400">(Cyt)</span></span>
+          <span class="w-2 h-2 rounded-full" style="background-color: #F29433;"></span>
+          <span class="text-slate-200">C <span class="text-[9px] text-slate-400">(Cyt)</span></span>
         </div>
         <div class="flex items-center space-x-1.5">
-          <span class="w-2.5 h-2.5 rounded-full shadow-sm" style="background-color: #26CC40;"></span>
-          <span class="text-slate-200">G <span class="text-[10px] text-slate-400">(Gua)</span></span>
+          <span class="w-2 h-2 rounded-full" style="background-color: #26CC40;"></span>
+          <span class="text-slate-200">G <span class="text-[9px] text-slate-400">(Gua)</span></span>
+        </div>
+      </div>
+      
+      <!-- 鍵結圖例 -->
+      <div class="pt-1 border-t border-slate-700/50 flex flex-col space-y-1 text-[10px]">
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-0.5 bg-[#ec4899] inline-block rounded"></span>
+          <span class="text-pink-300">鹽橋 (Salt Bridge)</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-0.5 bg-[#facc15] inline-block rounded"></span>
+          <span class="text-yellow-300">氫鍵 (H-bond, &ge;120&deg;)</span>
         </div>
       </div>
     </div>
     
     <!-- 左側：標題與結構選單 -->
-    <div class="vmd-panel rounded-xl px-3 py-2 flex items-center space-x-2.5 pointer-events-auto shadow-lg max-w-full">
-      <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2.5">
-        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
-        <span class="font-mono-vmd font-bold text-xs sm:text-sm tracking-wider text-cyan-400">VMD-WEB</span>
+    <div class="vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center space-x-2 pointer-events-auto shadow-lg max-w-[calc(100%-120px)] sm:max-w-md">
+      <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2 shrink-0">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span class="font-mono-vmd font-bold text-xs sm:text-sm tracking-wider text-cyan-400 truncate">HADDOCK</span>
       </div>
 
-      <div class="flex items-center space-x-1.5">
-        <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400"></i>
-        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2.5 py-1 focus:outline-none focus:border-cyan-400 max-w-[160px] sm:max-w-[240px] truncate cursor-pointer hover:bg-slate-800 transition">
+      <div class="flex items-center space-x-1.5 min-w-0">
+        <i data-lucide="file-text" class="w-3.5 h-3.5 text-cyan-400 shrink-0"></i>
+        <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs font-mono-vmd rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 w-full truncate cursor-pointer hover:bg-slate-800 transition">
           <option value="" disabled selected>搜尋 PDB 檔案中...</option>
         </select>
-        <button id="btn-refresh-files" title="重新整理目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition">
+        <button id="btn-refresh-files" title="重新整理目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition shrink-0">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
         </button>
       </div>
     </div>
 
     <!-- 右側：功能按鍵區 -->
-    <div class="flex items-center space-x-2 pointer-events-auto">
-      <button id="btn-focus-interface" title="特寫關鍵接觸區與 DNA 氫鍵" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition shadow-lg">
-        <i data-lucide="focus" class="w-4 h-4 text-cyan-400"></i>
-        <span id="focus-btn-text">結合區特寫</span>
+    <div class="flex items-center space-x-1.5 pointer-events-auto shrink-0">
+      <button id="btn-focus-interface" title="接觸區嚴謹氫鍵/鹽橋分析" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
+        <i data-lucide="focus" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
+        <span id="focus-btn-text">接觸面</span>
       </button>
 
-      <button id="btn-toggle-rep" title="樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 px-2.5 py-2 rounded-xl text-xs font-medium flex items-center space-x-1.5 transition">
-        <i data-lucide="palette" class="w-4 h-4"></i>
-        <span class="hidden sm:inline">樣式設定</span>
+      <button id="btn-toggle-rep" title="樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 p-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition">
+        <i data-lucide="palette" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
+        <span class="hidden sm:inline">樣式</span>
       </button>
 
-      <button id="btn-reset-view" title="重設整體視角 (R 鍵)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-2 rounded-xl text-xs transition">
-        <i data-lucide="maximize" class="w-4 h-4"></i>
+      <button id="btn-reset-view" title="重設整體視角 (R 鍵)" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-white p-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs transition">
+        <i data-lucide="maximize" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
       </button>
     </div>
   </header>
 
   <!-- 樣式設定面板 -->
-  <div id="rep-modal" class="hidden absolute top-16 right-4 z-30 w-88 max-w-[calc(100vw-2rem)] vmd-panel rounded-2xl p-4 shadow-2xl transition-all">
-    <div class="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
+  <div id="rep-modal" class="hidden absolute top-14 right-2 sm:right-4 z-30 w-80 max-w-[calc(100vw-1rem)] vmd-panel rounded-2xl p-3.5 sm:p-4 shadow-2xl transition-all">
+    <div class="flex items-center justify-between pb-2.5 border-b border-slate-700/60 mb-2.5">
       <div class="flex items-center space-x-2">
         <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
-        <h3 class="text-sm font-semibold text-slate-100">分子樣式設定</h3>
+        <h3 class="text-xs sm:text-sm font-semibold text-slate-100">分子樣式設定</h3>
       </div>
       <button id="btn-close-rep" class="text-slate-400 hover:text-white">
         <i data-lucide="x" class="w-4 h-4"></i>
@@ -140,11 +156,11 @@
 
     <!-- 蛋白質樣式與配色 -->
     <div class="mb-3 p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
-      <div class="text-xs font-mono-vmd text-cyan-400 font-bold mb-2">蛋白質 (Protein)</div>
+      <div class="text-xs font-mono-vmd text-cyan-400 font-bold mb-1.5">蛋白質 (WRKY63)</div>
       <div class="grid grid-cols-2 gap-2">
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
-          <select id="protein-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+          <select id="protein-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
             <option value="cartoon" selected>Cartoon 卡通</option>
             <option value="tube">Tube 圓管骨架</option>
             <option value="licorice">Licorice 棒狀</option>
@@ -152,105 +168,97 @@
         </div>
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">顏色</label>
-          <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="pymol_ss" selected>二級結構：PyMOL 風格 (螺旋紅/摺疊黃/Loop 綠)</option>
-            <option value="af_ss">二級結構：AlphaFold 風格 (螺旋粉紅/摺疊金黃/Loop 白)</option>
-            <option value="sstruc">二級結構 (NGL 原生配色)</option>
+          <select id="protein-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
+            <option value="pymol_ss" selected>二級結構 (PyMOL 紅/黃/綠)</option>
             <option value="element">Element (CPK 原子顏色)</option>
             <option value="residueindex">漸層彩虹 (Rainbow)</option>
-            <option value="#38bdf8">ColorID 0: 青藍 (Cyan)</option>
-            <option value="#ef4444">ColorID 1: 紅色 (Red)</option>
-            <option value="#22c55e">ColorID 2: 綠色 (Green)</option>
-            <option value="#eab308">ColorID 3: 黃色 (Yellow)</option>
+            <option value="#38bdf8">青藍 (Cyan)</option>
+            <option value="#ef4444">紅色 (Red)</option>
+            <option value="#22c55e">綠色 (Green)</option>
+            <option value="#eab308">黃色 (Yellow)</option>
           </select>
         </div>
         <div class="col-span-2">
           <label class="block text-[11px] text-slate-400 mb-1">二級結構判定</label>
-          <select id="ss-mode-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="dssp" selected>重新計算 (Kabsch-Sander DSSP，較準確)</option>
-            <option value="file">使用檔案 / NGL 原本判定</option>
+          <select id="ss-mode-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
+            <option value="dssp" selected>重新計算 (Kabsch-Sander DSSP)</option>
+            <option value="file">使用檔案原本判定</option>
           </select>
-          <label class="flex items-center gap-2 mt-2 text-xs text-slate-300 cursor-pointer">
-            <input type="checkbox" id="arrow-toggle" checked> β 股末端顯示箭頭 (關閉則改用淺→深漸層表示方向)
+          <label class="flex items-center gap-1.5 mt-2 text-[11px] text-slate-300 cursor-pointer">
+            <input type="checkbox" id="arrow-toggle" checked> β 股末端顯示箭頭
           </label>
         </div>
       </div>
     </div>
 
     <!-- DNA 樣式與配色 -->
-    <div class="mb-3 p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
-      <div class="text-xs font-mono-vmd text-amber-400 font-bold mb-2">DNA / 核酸 (Nucleic)</div>
+    <div class="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800">
+      <div class="text-xs font-mono-vmd text-amber-400 font-bold mb-1.5">DNA (FLC W-box)</div>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">樣式</label>
-          <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="vmd_ladder" selected>VMD NewCartoon + 圓頭短柱 (Ladder)</option>
-            <option value="cartoon_pure">雙螺旋絲帶 (Cartoon)</option>
-            <option value="licorice">Licorice 全棒狀模型</option>
+          <select id="dna-style-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
+            <option value="vmd_ladder" selected>VMD 階梯柱狀</option>
+            <option value="cartoon_pure">雙螺旋絲帶</option>
+            <option value="licorice">Licorice 棒狀</option>
           </select>
         </div>
         <div>
           <label class="block text-[11px] text-slate-400 mb-1">骨架顏色</label>
-          <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
-            <option value="#7dd3fc" selected>VMD Cyan (經典湖水藍)</option>
-            <option value="#cbd5e1">純淨銀白 (亮灰)</option>
-            <option value="resname">鹼基色同調 (A/T/C/G)</option>
-            <option value="element">Element CPK (碳黃/磷橘)</option>
-            <option value="#f97316">ColorID 5: 亮橘 (Orange)</option>
+          <select id="dna-color-select" class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none">
+            <option value="resname" selected>鹼基色同調 (A/T/C/G)</option>
+            <option value="#7dd3fc">經典湖水藍 (Cyan)</option>
+            <option value="#cbd5e1">純淨銀白</option>
+            <option value="element">Element CPK</option>
+            <option value="#f97316">亮橘 (Orange)</option>
           </select>
         </div>
       </div>
       
-      <!-- 鹼基文字標籤開關 -->
+      <!-- 鹼基標籤 -->
       <div class="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px] text-slate-300">
-        <span>顯示鹼基文字標籤 (DA, DT, DC, DG)</span>
+        <span>顯示鹼基文字標籤</span>
         <input type="checkbox" id="chk-base-labels" class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
       </div>
-    </div>
-
-    <!-- 總模擬時間設定 -->
-    <div class="p-2.5 bg-slate-900/40 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs font-mono-vmd text-slate-300">
-      <span>軌跡總時長 (ns):</span>
-      <input type="number" id="input-total-ns" value="100" min="1" step="5" class="w-16 bg-slate-800 border border-slate-700 text-cyan-300 px-2 py-1 rounded text-right focus:outline-none font-bold">
     </div>
   </div>
 
   <!-- 底部播放控制器 -->
-  <footer id="bottom-timeline" class="hidden absolute bottom-3 left-3 right-3 sm:left-6 sm:right-6 z-20 pointer-events-none flex-col items-center">
-    <div class="vmd-panel w-full max-w-2xl rounded-2xl p-2.5 sm:px-4 sm:py-3 shadow-2xl pointer-events-auto flex flex-col gap-2">
-      <div class="flex items-center space-x-3 w-full">
-        <span class="font-mono-vmd text-xs text-cyan-300 font-semibold w-8 text-right" id="slider-curr-frame">0</span>
+  <footer id="bottom-timeline" class="hidden absolute bottom-3 left-2 right-2 sm:left-6 sm:right-6 z-20 pointer-events-none flex-col items-center">
+    <div class="vmd-panel w-full max-w-xl rounded-2xl p-2 sm:px-4 sm:py-2.5 shadow-2xl pointer-events-auto flex flex-col gap-1.5">
+      <div class="flex items-center space-x-2.5 w-full">
+        <span class="font-mono-vmd text-xs text-cyan-300 font-semibold w-7 text-right" id="slider-curr-frame">0</span>
         <input id="trajectory-slider" type="range" min="0" max="0" value="0" step="1" 
                class="flex-1 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:outline-none" />
-        <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-8 text-left" id="slider-total-frame">0</span>
+        <span class="font-mono-vmd text-xs text-slate-400 font-semibold w-7 text-left" id="slider-total-frame">0</span>
       </div>
 
-      <div class="flex items-center justify-between w-full pt-0.5">
-        <button id="btn-loop-mode" class="px-2 py-1 rounded-lg text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1">
-          <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
-          <span id="loop-label">循環 (LOOP)</span>
+      <div class="flex items-center justify-between w-full">
+        <button id="btn-loop-mode" class="px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-mono-vmd font-semibold bg-slate-900 border border-slate-700 text-cyan-400 hover:text-white transition flex items-center space-x-1">
+          <i data-lucide="repeat" class="w-3 h-3"></i>
+          <span id="loop-label">循環</span>
         </button>
 
-        <div class="flex items-center space-x-1 sm:space-x-2">
-          <button id="btn-first-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-            <i data-lucide="skip-back" class="w-4 h-4"></i>
+        <div class="flex items-center space-x-1">
+          <button id="btn-first-frame" class="p-1 sm:p-1.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+            <i data-lucide="skip-back" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
-          <button id="btn-prev-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-            <i data-lucide="step-back" class="w-4 h-4"></i>
+          <button id="btn-prev-frame" class="p-1 sm:p-1.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+            <i data-lucide="step-back" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
-          <button id="btn-play" class="p-2 sm:p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1">
-            <i id="play-icon" data-lucide="pause" class="w-5 h-5 fill-current"></i>
+          <button id="btn-play" class="p-1.5 sm:p-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95 mx-1">
+            <i id="play-icon" data-lucide="pause" class="w-4 h-4 sm:w-5 sm:h-5 fill-current"></i>
           </button>
-          <button id="btn-next-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-            <i data-lucide="step-forward" class="w-4 h-4"></i>
+          <button id="btn-next-frame" class="p-1 sm:p-1.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+            <i data-lucide="step-forward" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
-          <button id="btn-last-frame" class="p-1.5 sm:p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-            <i data-lucide="skip-forward" class="w-4 h-4"></i>
+          <button id="btn-last-frame" class="p-1 sm:p-1.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+            <i data-lucide="skip-forward" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
           </button>
         </div>
 
-        <div class="flex items-center space-x-2 font-mono-vmd text-xs">
-          <span class="text-cyan-400 font-bold bg-slate-900/90 px-2 py-1 rounded-lg border border-cyan-500/30 shadow-inner" id="time-ns-display">
+        <div class="flex items-center font-mono-vmd text-xs">
+          <span class="text-cyan-400 font-bold bg-slate-900/90 px-2 py-0.5 rounded-lg border border-cyan-500/30 text-[11px]" id="time-ns-display">
             0.0 ns
           </span>
         </div>
@@ -266,9 +274,12 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // ===== 基準學術編號設定 =====
+    // ===== 基準學術編號設定（可自由增減要特別觀察特寫的殘基） =====
     const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108
-    const TARGET_DISPLAY_RESNOS = [114, 117]; // 欲在特寫區展示的標準殘基編號清單 (Lys114, Lys117)
+    const TARGET_DISPLAY_RESNOS = [114, 117]; // 欲在特寫區觀察的標準殘基編號清單
+
+    // 固定總時間為 100 ns
+    const FIXED_TOTAL_NS = 100.0;
 
     const appState = {
       stage: null,
@@ -276,7 +287,7 @@
       trajectory: null,
       totalFrames: 1,
       currentFrame: 0,
-      totalNs: 100,
+      totalNs: FIXED_TOTAL_NS,
       isPlaying: false,
       loopMode: 'loop',
       direction: 1,
@@ -290,20 +301,23 @@
       ssSchemeIds: null,
       strandT: new Map(),
       dnaStyle: 'vmd_ladder',
-      dnaColor: '#7dd3fc',
+      dnaColor: 'resname',
       showBaseLabels: false,
       isFocusingInterface: false,
       dnaStrandSelections: [],
       dnaRungStubs: [],
       ladderShapeComp: null,
-      focusLabelsShapeComp: null, // 存放自訂 3D 文字標籤的 Shape Component
+      focusLabelsShapeComp: null,
       
       focusTargetResnosInPdb: [],
-      focusLabelsData: [],        // [{ text: 'Lys114', atomIndex: 123 }, ...]
+      focusLabelsData: [],
       contactProtSele: '',
       contactDnaSele: '',
       focusViewSele: '',
-      distanceAtomPairs: [],
+      interactionPairs: {
+        saltBridge: [],
+        hbond: []
+      },
       
       zincAtomIndex: -1,
       isLoadingFile: false
@@ -323,7 +337,6 @@
       sliderCurr: document.getElementById('slider-curr-frame'),
       sliderTotal: document.getElementById('slider-total-frame'),
       timeNsDisplay: document.getElementById('time-ns-display'),
-      inputTotalNs: document.getElementById('input-total-ns'),
       btnPlay: document.getElementById('btn-play'),
       btnPrevFrame: document.getElementById('btn-prev-frame'),
       btnNextFrame: document.getElementById('btn-next-frame'),
@@ -356,13 +369,21 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
+    function formatPdbDisplayName(rawName) {
+      let clean = rawName.replace(/\.pdb$/i, '');
+      if (/haddock|complex|dock/i.test(clean)) {
+        return `[HADDOCK] WRKY63–FLC (${clean})`;
+      }
+      return `WRKY63–FLC W-box (${clean})`;
+    }
+
     async function scanFolderFiles() {
       if (appState.isLoadingFile) return;
 
       const urlParams = new URLSearchParams(window.location.search);
       const specifiedFile = urlParams.get('file') || urlParams.get('pdb');
       if (specifiedFile) {
-        dom.fileSelector.innerHTML = `<option value="${specifiedFile}">${specifiedFile}</option>`;
+        dom.fileSelector.innerHTML = `<option value="${specifiedFile}">${formatPdbDisplayName(specifiedFile)}</option>`;
         loadPdbFile(specifiedFile);
         return;
       }
@@ -393,13 +414,13 @@
         found.forEach(f => {
           const opt = document.createElement('option');
           opt.value = f.url;
-          opt.textContent = f.name;
+          opt.textContent = formatPdbDisplayName(f.name);
           dom.fileSelector.appendChild(opt);
         });
         hideLoading();
         loadPdbFile(found[0].url);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 PDB 檔案 (請在網址加上 ?file=檔名.pdb)</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 PDB 檔案 (請加 ?file=檔名.pdb)</option>';
         hideLoading();
       }
     }
@@ -411,7 +432,6 @@
       return { colorScheme: colorVal };
     }
 
-    /* ===== 自訂二級結構配色 ===== */
     function registerSSColorSchemes() {
       const rgb = c => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
       const toInt = v => (Math.round(v[0]) << 16) | (Math.round(v[1]) << 8) | Math.round(v[2]);
@@ -432,8 +452,7 @@
         };
       };
       appState.ssSchemeIds = {
-        pymol_ss: NGL.ColormakerRegistry.addScheme(make(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
-        af_ss: NGL.ColormakerRegistry.addScheme(make(0xFF4D8D, 0xFFC400, 0xFFFFFF), 'af_ss')
+        pymol_ss: NGL.ColormakerRegistry.addScheme(make(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss')
       };
     }
 
@@ -491,7 +510,7 @@
                   runStart = -1;
                 }
               }
-            } catch (e) { console.warn('箭頭修補失敗，改用原本粗細', e); }
+            } catch (e) { console.warn('箭頭修補失敗', e); }
             return out;
           };
           return spline;
@@ -617,14 +636,29 @@
       computeStrandEnds();
     }
 
+    // 計算空間向量長度、內積與夾角 (度數)
+    function calcAngleDeg(pA, pB, pC) {
+      // B 是頂點: 計算 BA 與 BC 夾角
+      const v1 = [pA[0] - pB[0], pA[1] - pB[1], pA[2] - pB[2]];
+      const v2 = [pC[0] - pB[0], pC[1] - pB[1], pC[2] - pB[2]];
+      const l1 = Math.hypot(v1[0], v1[1], v1[2]);
+      const l2 = Math.hypot(v2[0], v2[1], v2[2]);
+      if (l1 === 0 || l2 === 0) return 0;
+      let dot = (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (l1 * l2);
+      dot = Math.max(-1.0, Math.min(1.0, dot));
+      return Math.acos(dot) * (180.0 / Math.PI);
+    }
+
     /**
-     * 動態分析結構：以 W(108) 建立相對位移映射，動態對應 Lys114、Lys117
+     * 動態全接觸分析（結合幾何角度真氫鍵與鹽橋判定）
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
+      const nucleicAtoms = [];
+      const dnaResidueMap = new Map();
       let zincIdx = -1;
 
-      // 1. 蒐集核酸與鋅離子
+      // 1. 蒐集核酸原子與鋅離子
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -634,29 +668,37 @@
 
         const isDna = r.isNucleic() || /^(D[ATCG][35]?|[ATCG][35]?)$/.test(rname);
         if (isDna) {
-          let o3 = null, p = null;
-          let backboneAtom = null;
-          let baseRing = null;
+          let o3 = null, p = null, backboneAtom = null, baseRing = null;
+          const atomMap = {};
 
           r.eachAtom(a => {
             const aname = a.atomname.trim();
+            atomMap[aname] = { index: a.index, x: a.x, y: a.y, z: a.z, element: a.element };
+            if (a.element !== 'H') {
+              nucleicAtoms.push({
+                index: a.index,
+                atomname: aname,
+                element: a.element,
+                resno: a.resno,
+                resname: rname,
+                x: a.x, y: a.y, z: a.z
+              });
+            }
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
             if (aname === "P") {
               p = { x: a.x, y: a.y, z: a.z };
               backboneAtom = a.index;
             }
-            if (!backboneAtom && (aname === "C4'" || aname === "C3'" || aname === "C1'")) {
-              backboneAtom = a.index;
-            }
+            if (!backboneAtom && (aname === "C4'" || aname === "C3'" || aname === "C1'")) backboneAtom = a.index;
             if (aname === "N1" || aname === "N3" || aname === "C4") {
-              if (!baseRing || aname === "N1" || aname === "N3") {
-                baseRing = a.index;
-              }
+              if (!baseRing || aname === "N1" || aname === "N3") baseRing = a.index;
             }
           });
 
           if (!backboneAtom) r.eachAtom(a => { if (!backboneAtom) backboneAtom = a.index; });
           if (!baseRing) baseRing = backboneAtom;
+
+          dnaResidueMap.set(r.resno, { resno: r.resno, resname: rname, atoms: atomMap });
 
           nucleicResList.push({
             resno: r.resno,
@@ -671,7 +713,7 @@
 
       appState.zincAtomIndex = zincIdx;
 
-      // DNA 分股處理
+      // DNA 階梯分股處理
       if (nucleicResList.length > 0) {
         const strandGroups = [];
         let curGroup = [nucleicResList[0]];
@@ -681,9 +723,7 @@
           const r2 = nucleicResList[i + 1];
           let dist = 999;
           if (r1.o3 && r2.p) {
-            const dx = r1.o3.x - r2.p.x;
-            const dy = r1.o3.y - r2.p.y;
-            const dz = r1.o3.z - r2.p.z;
+            const dx = r1.o3.x - r2.p.x, dy = r1.o3.y - r2.p.y, dz = r1.o3.z - r2.p.z;
             dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
           }
           if (dist > 4.5 || r1.resname.endsWith('3') || r2.resname.endsWith('5')) {
@@ -709,17 +749,19 @@
         }));
       }
 
-      // 2. 蛋白質序列解析與基準位移計算 (以 W=108 為標準)
+      // 2. 蛋白質序列對齊 W=108 計算 offset
       const protResList = [];
+      const protResidueMap = new Map();
+
       structure.eachResidue(r => {
         if (r.isProtein()) {
           const rn = (r.resname || '').trim().toUpperCase();
-          protResList.push({
-            resno: r.resno,
-            resname: rn,
-            code: AA_MAP[rn] || 'X',
-            index: r.index
+          const atomMap = {};
+          r.eachAtom(a => {
+            atomMap[a.atomname.trim()] = { index: a.index, x: a.x, y: a.y, z: a.z, element: a.element };
           });
+          protResidueMap.set(r.resno, { resno: r.resno, resname: rn, atoms: atomMap, index: r.index });
+          protResList.push({ resno: r.resno, resname: rn, code: AA_MAP[rn] || 'X', index: r.index });
         }
       });
 
@@ -729,90 +771,166 @@
       let deltaOffset = 0;
       if (motifIdx !== -1) {
         const wInPdb = protResList[motifIdx].resno;
-        deltaOffset = STANDARD_ANCHOR_W - wInPdb; // delta = 108 - PDB中的W
+        deltaOffset = STANDARD_ANCHOR_W - wInPdb;
       } else {
         const sampleW = protResList.find(r => r.code === 'W');
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      // 3. 找出當前 PDB 實際對應的殘基 resno，並儲存其 CA 原子 index 與要顯示的字串
+      // 3. 取得欲展示之目標殘基
       const targetPdbResnos = [];
       const labelsData = [];
+      const targetResnoSet = new Set();
 
       TARGET_DISPLAY_RESNOS.forEach(stdNo => {
         const actualResnoInPdb = stdNo - deltaOffset;
         targetPdbResnos.push(actualResnoInPdb);
+        targetResnoSet.add(actualResnoInPdb);
 
         const matchRes = protResList.find(r => r.resno === actualResnoInPdb);
-        const resCode3 = matchRes ? (matchRes.resname[0] + matchRes.resname.slice(1).toLowerCase()) : 'Lys';
-        const displayLabel = `${resCode3}${stdNo}`; // 嚴格產生 "Lys114", "Lys117"
+        const resCode3 = matchRes ? (matchRes.resname[0] + matchRes.resname.slice(1).toLowerCase()) : 'Res';
+        const displayLabel = `${resCode3}${stdNo}`;
 
-        structure.eachAtom(a => {
-          if (a.resno === actualResnoInPdb && a.atomname.trim() === 'CA') {
-            labelsData.push({
-              text: displayLabel,
-              atomIndex: a.index
-            });
-          }
-        });
+        const resData = protResidueMap.get(actualResnoInPdb);
+        if (resData && resData.atoms['CA']) {
+          labelsData.push({
+            text: displayLabel,
+            atomIndex: resData.atoms['CA'].index
+          });
+        }
       });
 
       appState.focusTargetResnosInPdb = targetPdbResnos;
       appState.focusLabelsData = labelsData;
 
-      // 4. 接觸 DNA 原子與測距配對 (Lys114 NZ, Lys117 N)
-      const k114_actual = 114 - deltaOffset;
-      const k117_actual = 117 - deltaOffset;
+      // 4. 一視同仁：遍歷目標殘基與 DNA 所有原子進行幾何判斷 (鹽橋 + 幾何角度氫鍵)
+      const contactedDnaResnos = new Set();
+      const saltBridges = [];
+      const hbonds = [];
 
-      let k114_nz = null;
-      let k117_n = null;
+      targetPdbResnos.forEach(pResno => {
+        const pRes = protResidueMap.get(pResno);
+        if (!pRes) return;
+        const pAtoms = pRes.atoms;
 
-      structure.eachAtom(a => {
-        const an = a.atomname.trim();
-        if (a.resno === k114_actual && an === 'NZ') {
-          k114_nz = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
-        }
-        if (a.resno === k117_actual && an === 'N') {
-          k117_n = { index: a.index, x: a.x, y: a.y, z: a.z, resno: a.resno };
-        }
+        // 遍歷所有 DNA 殘基
+        dnaResidueMap.forEach(dRes => {
+          const dAtoms = dRes.atoms;
+
+          // A. 鹽橋判定：Lys NZ / Arg NH1,NH2,NE 與 磷酸基 OP1, OP2 (距離 <= 4.0 Å)
+          const posNitrogens = ['NZ', 'NH1', 'NH2', 'NE'];
+          const phosOxygens = ['OP1', 'OP2', 'O1P', 'O2P'];
+          posNitrogens.forEach(pn => {
+            if (pAtoms[pn]) {
+              phosOxygens.forEach(po => {
+                if (dAtoms[po]) {
+                  const d2 = Math.hypot(pAtoms[pn].x - dAtoms[po].x, pAtoms[pn].y - dAtoms[po].y, pAtoms[pn].z - dAtoms[po].z);
+                  if (d2 <= 4.0) {
+                    contactedDnaResnos.add(dRes.resno);
+                    saltBridges.push([pAtoms[pn].index, dAtoms[po].index]);
+                  }
+                }
+              });
+            }
+          });
+
+          // B. 嚴謹幾何角度氫鍵判定
+          // 情況 1：蛋白質為供體 (Protein Donor: N/O -> DNA Acceptor: O/N)
+          Object.keys(pAtoms).forEach(pName => {
+            const pAtom = pAtoms[pName];
+            if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
+
+            // 計算蛋白質供體氫座標 (若 PDB 無 H，由相鄰原子外推虛擬氫)
+            let virtualH = null;
+            if (pAtoms['H']) {
+              virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
+            } else if (pName === 'N' && pAtoms['CA']) {
+              // 主鏈醯胺氫：外推方向由 CA 延伸
+              const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
+              const vl = Math.hypot(vx, vy, vz) || 1;
+              virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
+            } else if (pName === 'NZ' && pAtoms['CE']) {
+              // Lys 側鏈 NZ
+              const vx = pAtom.x - pAtoms['CE'].x, vy = pAtom.y - pAtoms['CE'].y, vz = pAtom.z - pAtoms['CE'].z;
+              const vl = Math.hypot(vx, vy, vz) || 1;
+              virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
+            } else if ((pName === 'NH1' || pName === 'NH2' || pName === 'NE') && pAtoms['CZ']) {
+              // Arg 側鏈
+              const vx = pAtom.x - pAtoms['CZ'].x, vy = pAtom.y - pAtoms['CZ'].y, vz = pAtom.z - pAtoms['CZ'].z;
+              const vl = Math.hypot(vx, vy, vz) || 1;
+              virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
+            } else if (pName === 'OG' && pAtoms['CB']) {
+              // Ser
+              const vx = pAtom.x - pAtoms['CB'].x, vy = pAtom.y - pAtoms['CB'].y, vz = pAtom.z - pAtoms['CB'].z;
+              const vl = Math.hypot(vx, vy, vz) || 1;
+              virtualH = [pAtom.x + (vx / vl) * 0.96, pAtom.y + (vy / vl) * 0.96, pAtom.z + (vz / vl) * 0.96];
+            }
+
+            // 與 DNA 所有潛在受體比對
+            Object.keys(dAtoms).forEach(dName => {
+              const dAtom = dAtoms[dName];
+              if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
+
+              const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
+              if (distDA <= 3.6) {
+                if (virtualH) {
+                  const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
+                  const angle = calcAngleDeg([pAtom.x, pAtom.y, pAtom.z], virtualH, [dAtom.x, dAtom.y, dAtom.z]);
+                  // 嚴格判定：D-H..A 夾角 >= 120° 且 H..A <= 2.6 Å
+                  if (angle >= 120.0 && distHA <= 2.6) {
+                    contactedDnaResnos.add(dRes.resno);
+                    hbonds.push([pAtom.index, dAtom.index]);
+                  }
+                } else if (distDA <= 3.2) {
+                  // 無法可靠外推 H 時以嚴格距離 cutoff
+                  contactedDnaResnos.add(dRes.resno);
+                  hbonds.push([pAtom.index, dAtom.index]);
+                }
+              }
+            });
+          });
+
+          // 情況 2：DNA 為供體 (DNA Base N-H -> Protein Acceptor: O/N)
+          // DNA 鹼基常見供體：Thy N3, Gua N1/N2, Cyt N4, Ade N6
+          const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
+          dnaDonors.forEach(dName => {
+            const dAtom = dAtoms[dName];
+            if (!dAtom) return;
+            // 外推 DNA 鹼基上的氫 (基於環相鄰碳)
+            let adjC = dAtoms['C2'] || dAtoms['C4'] || dAtoms['C6'];
+            let vH = null;
+            if (adjC) {
+              const vx = dAtom.x - adjC.x, vy = dAtom.y - adjC.y, vz = dAtom.z - adjC.z;
+              const vl = Math.hypot(vx, vy, vz) || 1;
+              vH = [dAtom.x + (vx / vl) * 1.0, dAtom.y + (vy / vl) * 1.0, dAtom.z + (vz / vl) * 1.0];
+            }
+
+            Object.keys(pAtoms).forEach(pName => {
+              const pAtom = pAtoms[pName];
+              if (pAtom.element !== 'O' && pAtom.element !== 'N') return;
+
+              const distDA = Math.hypot(dAtom.x - pAtom.x, dAtom.y - pAtom.y, dAtom.z - pAtom.z);
+              if (distDA <= 3.6) {
+                if (vH) {
+                  const distHA = Math.hypot(vH[0] - pAtom.x, vH[1] - pAtom.y, vH[2] - pAtom.z);
+                  const angle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], vH, [pAtom.x, pAtom.y, pAtom.z]);
+                  if (angle >= 120.0 && distHA <= 2.6) {
+                    contactedDnaResnos.add(dRes.resno);
+                    hbonds.push([pAtom.index, dAtom.index]);
+                  }
+                } else if (distDA <= 3.2) {
+                  contactedDnaResnos.add(dRes.resno);
+                  hbonds.push([pAtom.index, dAtom.index]);
+                }
+              }
+            });
+          });
+        });
       });
 
-      const contactedDnaResnos = new Set();
-      const distPairs = [];
-
-      // Lys114 NZ -> 大溝鹼基受體 (N7, O4, O6)，收集全部 < 3.5 Å 的，不只最近的一個
-if (k114_nz) {
-  structure.eachAtom(a => {
-    if (!a.isNucleic()) return;
-    const an = a.atomname.trim();
-    if (['N7', 'O4', 'O6'].includes(an)) {
-      const dx = a.x - k114_nz.x;
-      const dy = a.y - k114_nz.y;
-      const dz = a.z - k114_nz.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < 3.5 * 3.5) {
-        contactedDnaResnos.add(a.resno);
-        distPairs.push([k114_nz.index, a.index]);
-      }
-    }
-  });
-}
-
-if (k117_n) {
-  structure.eachAtom(a => {
-    if (!a.isNucleic()) return;
-    const an = a.atomname.trim();
-    if (['OP1', 'OP2', 'O1P', 'O2P'].includes(an)) {
-      const dx = a.x - k117_n.x, dy = a.y - k117_n.y, dz = a.z - k117_n.z;
-      if (dx*dx + dy*dy + dz*dz < 3.5 * 3.5) {
-        contactedDnaResnos.add(a.resno);
-        distPairs.push([k117_n.index, a.index]);
-      }
-    }
-  });
-}
-
-      appState.contactProtSele = `(${targetPdbResnos.join(' or ')}) and protein and not hydrogen`;
+      appState.contactProtSele = targetPdbResnos.length > 0 
+        ? `(${targetPdbResnos.join(' or ')}) and protein and not hydrogen` 
+        : 'none';
 
       const dResArr = Array.from(contactedDnaResnos);
       if (dResArr.length > 0) {
@@ -825,11 +943,14 @@ if (k117_n) {
         ? [...targetPdbResnos, ...dResArr].join(' or ')
         : 'nucleic';
 
-      appState.distanceAtomPairs = distPairs;
+      appState.interactionPairs = {
+        saltBridge: saltBridges,
+        hbond: hbonds
+      };
     }
 
     /**
-     * 重建所有 Representation
+     * 重繪所有 Representation
      */
     function applyAllRepresentations() {
       if (!appState.component) return;
@@ -849,7 +970,6 @@ if (k117_n) {
       const pColorParams = getColorParams(appState.protColor);
       const dColorParams = getColorParams(appState.dnaColor);
 
-      // 特寫時背景半透明化 (透明度 0.22)
       const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
 
       // 1. 蛋白質主體
@@ -882,7 +1002,7 @@ if (k117_n) {
         });
       }
       
-      // 2. DNA 雙螺旋絲帶
+      // 2. DNA 骨架
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -901,7 +1021,7 @@ if (k117_n) {
         });
       }
 
-      // 3. DNA 階梯橫竿 (VMD 圓頭短柱)
+      // 3. DNA 階梯柱狀 (VMD Ladder)
       if (dRep === 'vmd_ladder') {
         if (appState.dnaRungStubs && appState.dnaRungStubs.length > 0) {
           const shape = new NGL.Shape("vmd_rungs");
@@ -934,10 +1054,7 @@ if (k117_n) {
               const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
               if (dist > 0.8) {
-                const ux = dx / dist;
-                const uy = dy / dist;
-                const uz = dz / dist;
-
+                const ux = dx / dist, uy = dy / dist, uz = dz / dist;
                 const startX = aBackbone.x + ux * 1.2;
                 const startY = aBackbone.y + uy * 1.2;
                 const startZ = aBackbone.z + uz * 1.2;
@@ -963,16 +1080,16 @@ if (k117_n) {
         });
       }
 
-      // 4. 鋅離子 (ZN)
+      // 4. 鋅離子 (ZN) - 縮小比例至 0.35
       const znSele = appState.zincAtomIndex >= 0 ? `@${appState.zincAtomIndex}` : '_ZN or :ZN or [ZN] or zinc';
       appState.component.addRepresentation('spacefill', {
         sele: znSele,
         color: '#94a3b8',
         opacity: bgOpacity,
-        scale: 0.65
+        scale: 0.35
       });
 
-      // 5. 鹼基文字標籤
+      // 5. 鹼基標籤
       if (appState.showBaseLabels) {
         appState.component.addRepresentation('label', {
           sele: 'nucleic and not protein and not hydrogen and (.C1\' or .C1*)',
@@ -983,9 +1100,8 @@ if (k117_n) {
         });
       }
 
-      // 6. 結合區特寫模式 (純淨高亮 + 虛線與 Å 標註 + 3D Shape 文字標籤)
+      // 6. 接觸面特寫
       if (appState.isFocusingInterface) {
-        // 關鍵殘基 (Licorice 棒狀)
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
@@ -995,7 +1111,6 @@ if (k117_n) {
             multipleBond: 'off'
           });
 
-          // 使用 NGL.Shape 直接在 3D 空間繪製文字，完全隔絕 NGL label 的 PDB 編號回退
           if (appState.focusLabelsData && appState.focusLabelsData.length > 0) {
             const textShape = new NGL.Shape("focus_labels");
             const structure = appState.component.structure;
@@ -1003,12 +1118,11 @@ if (k117_n) {
             appState.focusLabelsData.forEach(item => {
               const atomProxy = structure.getAtomProxy(item.atomIndex);
               if (atomProxy) {
-                // 將文字放置在 CA 原子的稍微上方偏離處
                 textShape.addText(
                   [atomProxy.x, atomProxy.y + 1.2, atomProxy.z],
-                  [0.22, 0.74, 0.97], // #38bdf8 青藍色
-                  1.6,                // 文字大小
-                  item.text           // 嚴格印出計算後的字串 (如 "Lys114", "Lys117")
+                  [0.22, 0.74, 0.97],
+                  1.5,
+                  item.text
                 );
               }
             });
@@ -1018,7 +1132,6 @@ if (k117_n) {
           }
         }
 
-        // 接觸之 DNA 殘基
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
@@ -1029,16 +1142,32 @@ if (k117_n) {
           });
         }
 
-        // 氫鍵虛線與 Ångström 標註
-        if (appState.distanceAtomPairs && appState.distanceAtomPairs.length > 0) {
+        // 鹽橋 (洋紅色粗虛線 #ec4899)
+        if (appState.interactionPairs.saltBridge.length > 0) {
           appState.component.addRepresentation('distance', {
-            atomPair: appState.distanceAtomPairs,
+            atomPair: appState.interactionPairs.saltBridge,
+            color: '#ec4899',
+            radius: 0.09,
+            dashLength: 0.25,
+            labelUnit: 'angstrom',
+            labelColor: '#fbcfe8',
+            labelSize: 1.3,
+            labelBackground: true,
+            labelBackgroundColor: '#0b0f19',
+            labelBackgroundMargin: 0.1
+          });
+        }
+
+        // 嚴謹氫鍵 (金黃色細虛線 #facc15)
+        if (appState.interactionPairs.hbond.length > 0) {
+          appState.component.addRepresentation('distance', {
+            atomPair: appState.interactionPairs.hbond,
             color: '#facc15',
-            radius: 0.08,
+            radius: 0.07,
             dashLength: 0.2,
             labelUnit: 'angstrom',
             labelColor: '#fef08a',
-            labelSize: 1.4,
+            labelSize: 1.3,
             labelBackground: true,
             labelBackgroundColor: '#0b0f19',
             labelBackgroundMargin: 0.1
@@ -1068,7 +1197,7 @@ if (k117_n) {
       } else {
         appState.component.autoView(600);
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '結合區特寫';
+        dom.focusBtnText.textContent = '接觸面';
       }
     }
 
@@ -1077,7 +1206,7 @@ if (k117_n) {
         dom.timeNsDisplay.textContent = '0.0 ns';
         return;
       }
-      const currentNs = (frame / (appState.totalFrames - 1)) * appState.totalNs;
+      const currentNs = (frame / (appState.totalFrames - 1)) * FIXED_TOTAL_NS;
       dom.timeNsDisplay.textContent = `${currentNs.toFixed(1)} ns`;
     }
 
@@ -1269,27 +1398,19 @@ if (k117_n) {
         setFrame(parseInt(e.target.value, 10));
       });
 
-      dom.inputTotalNs.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        if (!isNaN(val) && val > 0) {
-          appState.totalNs = val;
-          updateTimeDisplay(appState.currentFrame);
-        }
-      });
-
       dom.btnLoopMode.addEventListener('click', () => {
         if (appState.loopMode === 'loop') {
           appState.loopMode = 'rock';
           appState.direction = 1;
-          dom.loopLabel.textContent = '往返 (ROCK)';
+          dom.loopLabel.textContent = '往返';
         } else if (appState.loopMode === 'rock') {
           appState.loopMode = 'once';
           appState.direction = 1;
-          dom.loopLabel.textContent = '單次 (ONCE)';
+          dom.loopLabel.textContent = '單次';
         } else {
           appState.loopMode = 'loop';
           appState.direction = 1;
-          dom.loopLabel.textContent = '循環 (LOOP)';
+          dom.loopLabel.textContent = '循環';
         }
       });
 
