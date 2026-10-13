@@ -62,8 +62,14 @@
     input[type=range] {
       accent-color: #38bdf8;
     }
-    input[type=range] {
-      accent-color: #38bdf8;
+
+    /* 手勢水平輕擺動畫 */
+    @keyframes sway {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(6px); }
+    }
+    .animate-sway {
+      animation: sway 1.4s ease-in-out infinite;
     }
 
     /* 解決 Android / iOS 底部虛擬按鍵與導覽列遮擋問題 */
@@ -82,6 +88,12 @@
 
   <!-- 3D 渲染視窗 -->
   <div id="viewport" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
+
+  <!-- 極簡互動提示（播放開始時顯示，使用者觸碰或2.8秒後自動淡出） -->
+  <div id="gesture-hint" class="absolute bottom-28 sm:bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none transition-all duration-700 opacity-0 translate-y-2 flex items-center space-x-2 bg-slate-950/85 backdrop-blur-md border border-cyan-400/40 px-3.5 py-1.5 rounded-full text-xs text-cyan-200 shadow-2xl">
+    <i data-lucide="hand" class="w-4 h-4 text-cyan-400 animate-sway"></i>
+    <span class="tracking-wide">按住拖曳視角 ｜ 滾輪或雙指縮放</span>
+  </div>
 
   <!-- 讀取狀態遮罩 -->
   <div id="loading-overlay" class="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center transition-opacity duration-300 pointer-events-none">
@@ -136,7 +148,7 @@
     <div class="vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center space-x-2 pointer-events-auto shadow-lg max-w-[calc(100%-120px)] sm:max-w-md">
       <div class="flex items-center space-x-1.5 border-r border-slate-700/80 pr-2 shrink-0">
         <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-        <span class="font-bold text-xs sm:text-sm tracking-wider text-cyan-400 truncate">結構展示</span>
+        <span class="font-bold text-xs sm:text-sm tracking-wider text-cyan-400 truncate">3D 互動展示</span>
       </div>
 
       <div class="flex items-center space-x-1.5 min-w-0">
@@ -299,7 +311,7 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // 基準學術編號設定 (可隨意增減要追蹤特寫的殘基)
+    // 基準學術編號設定[cite: 1]
     const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108[cite: 1]
     const TARGET_DISPLAY_RESNOS = [114, 117]; // 自訂欲追蹤展示的標準殘基清單[cite: 1]
 
@@ -344,13 +356,15 @@
       },
       
       zincAtomIndex: -1,
-      isLoadingFile: false
+      isLoadingFile: false,
+      hasShownHint: false
     };
 
     lucide.createIcons();
 
     const dom = {
       viewport: document.getElementById('viewport'),
+      gestureHint: document.getElementById('gesture-hint'),
       loadingOverlay: document.getElementById('loading-overlay'),
       loadingText: document.getElementById('loading-text'),
       loadingSubtext: document.getElementById('loading-subtext'),
@@ -391,6 +405,27 @@
 
     function hideLoading() {
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    // 輕量手勢操作提示（顯示2.8秒或點擊後自動淡出）
+    function showGestureHintOnce() {
+      if (appState.hasShownHint || !dom.gestureHint) return;
+      appState.hasShownHint = true;
+
+      // 顯示
+      dom.gestureHint.classList.remove('opacity-0', 'translate-y-2');
+      dom.gestureHint.classList.add('opacity-100', 'translate-y-0');
+
+      let timer = null;
+      const dismiss = () => {
+        if (timer) clearTimeout(timer);
+        dom.gestureHint.classList.remove('opacity-100', 'translate-y-0');
+        dom.gestureHint.classList.add('opacity-0', 'translate-y-2');
+        window.removeEventListener('pointerdown', dismiss);
+      };
+
+      window.addEventListener('pointerdown', dismiss);
+      timer = setTimeout(dismiss, 2800);
     }
 
     // 簡潔白話顯示檔名，並過濾掉技術性字眼
@@ -496,23 +531,6 @@
               return toInt(light.map((l, k) => l + (dark[k] - l) * t));
             }
             return loop;
-          };
-        };
-      };
-
-      // 2. DNA 鹼基同調配色 (A 藍 / T 紅 / C 橘 / G 綠)
-      const makeDnaResname = () => {
-        const baseColorInt = {
-          'A': 0x3859F2, 'DA': 0x3859F2,
-          'T': 0xEB4759, 'DT': 0xEB4759,
-          'C': 0xF29433, 'DC': 0xF29433,
-          'G': 0x26CC40, 'DG': 0x26CC40,
-          'U': 0xEB4759, 'DU': 0xEB4759
-        };
-        return function () {
-          this.atomColor = function (atom) {
-            const rn = (atom.resname || '').trim().toUpperCase();
-            return baseColorInt[rn] || 0x7dd3fc; // 預設水藍色
           };
         };
       };
@@ -713,8 +731,8 @@
       return Math.acos(dot) * (180.0 / Math.PI);
     }
 
-/**
-     * 動態全接觸分析（修復括號語法錯誤、納入 Lys 旋轉圓錐判斷與幾何角度真氫鍵）
+    /**
+     * 動態全接觸分析（幾何角度真氫鍵與鹽橋判斷）
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -813,7 +831,7 @@
         }));
       }
 
-      // 2. 蛋白質序列對齊 W=108 計算 offset
+      // 2. 蛋白質序列對齊 W=108 計算 offset[cite: 1]
       const protResList = [];
       const protResidueMap = new Map();
 
@@ -841,7 +859,7 @@
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      // 3. 取得目標殘基
+      // 3. 取得目標殘基[cite: 1]
       const targetPdbResnos = [];
       const labelsData = [];
       const targetResnoSet = new Set();
@@ -924,7 +942,7 @@
 
               const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
 
-              // 1. 針對 Lys NZ / Arg 等多氫基團：距離 <= 3.5 Å 且受體不在 C-N 反方向
+              // 針對 Lys NZ / Arg 等多氫基團：距離 <= 3.5 Å 且受體不在 C-N 反方向
               if (isFlexibleDonor) {
                 if (distDA <= 3.5) {
                   let isValidAngle = true;
@@ -941,7 +959,7 @@
                 return;
               }
 
-              // 2. 針對主鏈或剛性供體：檢查 D-H..A 夾角 >= 120°
+              // 針對主鏈或剛性供體：檢查 D-H..A 夾角 >= 120°
               if (distDA <= 3.6) {
                 if (virtualH) {
                   const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
@@ -1069,7 +1087,7 @@
         });
       }
       
-      // 2. DNA 骨架（預設水藍色 #7dd3fc，若選鹼基色同調則使用自訂 scheme）
+      // 2. DNA 骨架
       if (appState.dnaStrandSelections && appState.dnaStrandSelections.length > 0) {
         appState.dnaStrandSelections.forEach(strandSele => {
           if (dRep === 'vmd_ladder' || dRep === 'cartoon_pure') {
@@ -1147,7 +1165,7 @@
         });
       }
 
-      // 4. 鋅離子 (ZN) - 縮小比例至 0.35
+      // 4. 鋅離子 (ZN)
       const znSele = appState.zincAtomIndex >= 0 ? `@${appState.zincAtomIndex}` : '_ZN or :ZN or [ZN] or zinc';
       appState.component.addRepresentation('spacefill', {
         sele: znSele,
@@ -1404,12 +1422,16 @@
             dom.bottomTimeline.classList.add('flex');
             setFrame(0);
             startPlayback();
+            // 動態軌跡成功播映時，呈現極簡手勢操作提示（2.8秒後自動淡出）
+            showGestureHintOnce();
           } else {
             appState.totalFrames = 1;
             appState.trajectory = null;
             dom.bottomTimeline.classList.add('hidden');
             dom.bottomTimeline.classList.remove('flex');
             stopPlayback();
+            // 靜態結構同樣顯示一次手勢提示
+            showGestureHintOnce();
           }
         }
 
