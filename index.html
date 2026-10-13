@@ -175,7 +175,7 @@
       <!-- 特寫按鈕 (僅顯示 K117 和 T118) -->
       <button id="btn-focus-interface" title="K117 & T118 接觸分析特寫" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
         <i data-lucide="focus" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
-        <span id="focus-btn-text">特寫</span>
+        <span id="focus-btn-text">K117 與 T118 特寫</span>
       </button>
 
       <button id="btn-toggle-rep" title="樣式與配色" class="vmd-panel hover:bg-slate-800 text-slate-300 hover:text-cyan-300 p-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs font-medium flex items-center space-x-1 transition">
@@ -1358,10 +1358,10 @@
         dom.btnFocusMotif.classList.add('bg-amber-500/25', 'border-amber-400');
         dom.focusMotifBtnText.textContent = '重設視角';
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '特寫';
+        dom.focusBtnText.textContent = 'K117 與 T118 特寫';
       } else {
         dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '特寫';
+        dom.focusBtnText.textContent = 'K117 與 T118 特寫';
         dom.btnFocusMotif.classList.remove('bg-amber-500/25', 'border-amber-400');
         dom.focusMotifBtnText.textContent = '核心特寫';
       }
