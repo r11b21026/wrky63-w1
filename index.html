@@ -938,60 +938,64 @@
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
 
-            const isFlexibleDonor = ['NZ', 'NH1', 'NH2', 'NE'].includes(pName);
-            let virtualH = null;
-            if (pAtoms['H']) {
-              virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
-            } else if (pName === 'N' && pAtoms['CA']) {
-              // 主鏈醯胺氫 (主鏈參與結合的關鍵氫鍵來源)
-              const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
-              const vl = Math.hypot(vx, vy, vz) || 1;
-              virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
-            } else if (pName === 'OG' && pAtoms['CB']) {
-              const vx = pAtom.x - pAtoms['CB'].x, vy = pAtom.y - pAtoms['CB'].y, vz = pAtom.z - pAtoms['CB'].z;
-              const vl = Math.hypot(vx, vy, vz) || 1;
-              virtualH = [pAtom.x + (vx / vl) * 0.96, pAtom.y + (vy / vl) * 0.96, pAtom.z + (vz / vl) * 0.96];
-            }
+// 1. 將 OG1 (Thr) 與 OG (Ser) 納入可自由旋轉的供體清單
+const isFlexibleDonor = ['NZ', 'NH1', 'NH2', 'NE', 'OG', 'OG1'].includes(pName);
 
-            Object.keys(dAtoms).forEach(dName => {
-              const dAtom = dAtoms[dName];
-              if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
+let virtualH = null;
+if (pAtoms['H']) {
+  virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
+} else if (pName === 'N' && pAtoms['CA']) {
+  // 主鏈醯胺氫 (主鏈參與結合的關鍵氫鍵來源)
+  const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
+  const vl = Math.hypot(vx, vy, vz) || 1;
+  virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
+} else if ((pName === 'OG' || pName === 'OG1') && pAtoms['CB']) {
+  // 兼顧 Ser (OG) 與 Thr (OG1)
+  const vx = pAtom.x - pAtoms['CB'].x, vy = pAtom.y - pAtoms['CB'].y, vz = pAtom.z - pAtoms['CB'].z;
+  const vl = Math.hypot(vx, vy, vz) || 1;
+  virtualH = [pAtom.x + (vx / vl) * 0.96, pAtom.y + (vy / vl) * 0.96, pAtom.z + (vz / vl) * 0.96];
+}
 
-              const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
-              let hbondFormed = false;
+Object.keys(dAtoms).forEach(dName => {
+  const dAtom = dAtoms[dName];
+  if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
 
-              if (isFlexibleDonor) {
-                if (distDA <= 3.5) {
-                  let isValidAngle = true;
-                  const prevC = pAtoms['CE'] || pAtoms['CZ'] || pAtoms['CD'];
-                  if (prevC) {
-                    const coneAngle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], [pAtom.x, pAtom.y, pAtom.z], [prevC.x, prevC.y, prevC.z]);
-                    if (coneAngle < 80.0) isValidAngle = false;
-                  }
-                  if (isValidAngle) hbondFormed = true;
-                }
-              } else if (distDA <= 3.6) {
-                if (virtualH) {
-                  const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
-                  const angle = calcAngleDeg([pAtom.x, pAtom.y, pAtom.z], virtualH, [dAtom.x, dAtom.y, dAtom.z]);
-                  if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
-                } else if (distDA <= 3.2) {
-                  hbondFormed = true;
-                }
-              }
+  const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
+  let hbondFormed = false;
 
-              if (hbondFormed) {
-                hasDirectContact = true;
-                const pair = [pAtom.index, dAtom.index];
-                const key = `${pAtom.index}_${dAtom.index}`;
-                if (!pairInteractionMap.has(key)) {
-                  pairInteractionMap.set(key, { pair, isSaltBridge: false, isHbond: true });
-                } else {
-                  pairInteractionMap.get(key).isHbond = true;
-                }
-              }
-            });
-          });
+  if (isFlexibleDonor) {
+    // 對於多氫 (NZ) 或可自由旋轉氫 (OG/OG1)，採用 3.5 Å 幾何錐體判定
+    if (distDA <= 3.5) {
+      let isValidAngle = true;
+      const prevC = pAtoms['CB'] || pAtoms['CE'] || pAtoms['CZ'] || pAtoms['CD'];
+      if (prevC) {
+        // C-O...受體 角度通常要在 80 度以上，排除背向反折的不可行幾何
+        const coneAngle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], [pAtom.x, pAtom.y, pAtom.z], [prevC.x, prevC.y, prevC.z]);
+        if (coneAngle < 80.0) isValidAngle = false;
+      }
+      if (isValidAngle) hbondFormed = true;
+    }
+  } else if (distDA <= 3.6) {
+    if (virtualH) {
+      const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
+      const angle = calcAngleDeg([pAtom.x, pAtom.y, pAtom.z], virtualH, [dAtom.x, dAtom.y, dAtom.z]);
+      if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
+    } else if (distDA <= 3.2) {
+      hbondFormed = true;
+    }
+  }
+
+  if (hbondFormed) {
+    hasDirectContact = true;
+    const pair = [pAtom.index, dAtom.index];
+    const key = `${pAtom.index}_${dAtom.index}`;
+    if (!pairInteractionMap.has(key)) {
+      pairInteractionMap.set(key, { pair, isSaltBridge: false, isHbond: true });
+    } else {
+      pairInteractionMap.get(key).isHbond = true;
+    }
+  }
+});
 
           // B2: DNA 鹼基為供體
           const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
