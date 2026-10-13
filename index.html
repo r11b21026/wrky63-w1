@@ -167,12 +167,12 @@
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-1.5 pointer-events-auto shrink-0">
       <!-- 核心 WRKYGQK 特寫按鈕 -->
-      <button id="btn-focus-motif" title="WRKYGQK 核心序列與接觸 DNA 殘基特寫" class="vmd-panel hover:bg-amber-950/60 border-amber-400/50 text-amber-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
+      <button id="btn-focus-motif" title="WRKYGQK (W108-K114) 核心序列特寫" class="vmd-panel hover:bg-amber-950/60 border-amber-400/50 text-amber-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
         <i data-lucide="sparkles" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400"></i>
         <span id="focus-motif-btn-text">核心特寫</span>
       </button>
 
-      <!-- 原特寫按鈕 (僅顯示 K117 和 T118) -->
+      <!-- 特寫按鈕 (僅顯示 K117 和 T118) -->
       <button id="btn-focus-interface" title="K117 & T118 接觸分析特寫" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
         <i data-lucide="focus" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
         <span id="focus-btn-text">特寫</span>
@@ -320,12 +320,12 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // 基準學術編號設定
-    const STANDARD_ANCHOR_W = 108;               // WRKYGQK 的 W 在標準序列中是 108
+    // 基準學術編號設定[cite: 1]
+    const STANDARD_ANCHOR_W = 108;               // WRKYGQK 的 W 在標準序列中是 108[cite: 1]
     const TARGET_DISPLAY_RESNOS = [117, 118];    // 特寫：僅顯示 K117 和 T118
     const MOTIF_RESNOS = [108, 109, 110, 111, 112, 113, 114]; // 核心 WRKYGQK 殘基 (W108 ~ K114)
 
-    const FIXED_TOTAL_NS = 100.0;
+    const FIXED_TOTAL_NS = 100.0; //[cite: 1]
 
     const appState = {
       stage: null,
@@ -347,11 +347,11 @@
       ssSchemeIds: null,
       strandT: new Map(),
       dnaStyle: 'vmd_ladder',
-      dnaColor: '#7dd3fc',
+      dnaColor: '#7dd3fc', //[cite: 1]
       showBaseLabels: false,
       
-      // 特寫狀態
-      focusMode: 'none', // 'none' | 'interface' (K117/T118) | 'motif' (WRKYGQK)
+      // 特寫狀態: 'none' | 'interface' (K117/T118) | 'motif' (W108-K114)
+      focusMode: 'none',
       
       dnaStrandSelections: [],
       dnaRungStubs: [],
@@ -740,7 +740,7 @@
     }
 
     /**
-     * 動態接觸與作用力分析
+     * 動態接觸與作用力分析 (保留完整 DNA 分股與梯子、鋅離子支援)
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -748,7 +748,7 @@
       const dnaResidueMap = new Map();
       let zincIdx = -1;
 
-      // 1. 蒐集核酸原子與鋅離子
+      // 1. 蒐集核酸原子與鋅離子 (保持完全不變)[cite: 1]
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -803,7 +803,7 @@
 
       appState.zincAtomIndex = zincIdx;
 
-      // DNA 階梯分股處理
+      // DNA 階梯分股處理 (完全保留原邏輯)[cite: 1]
       if (nucleicResList.length > 0) {
         const strandGroups = [];
         let curGroup = [nucleicResList[0]];
@@ -839,7 +839,7 @@
         }));
       }
 
-      // 2. 蛋白質序列對齊 W=108 計算 offset
+      // 2. 蛋白質序列對齊 W=108 計算 offset[cite: 1]
       const protResList = [];
       const protResidueMap = new Map();
 
@@ -869,8 +869,8 @@
 
       // 3. 根據目前特寫模式選定焦點目標殘基清單
       const currentStandardList = (appState.focusMode === 'motif')
-        ? MOTIF_RESNOS
-        : TARGET_DISPLAY_RESNOS; // interface 模式 (K117 & T118)
+        ? MOTIF_RESNOS              // 核心序列 W108 ~ K114
+        : TARGET_DISPLAY_RESNOS;    // 特寫：僅 K117 和 T118
 
       const targetPdbResnos = [];
       const labelsData = [];
@@ -895,9 +895,10 @@
       appState.focusTargetResnosInPdb = targetPdbResnos;
       appState.focusLabelsData = labelsData;
 
-      // 4. 殘基接觸與作用力分析 (鹽橋與氫鍵不互斥)
+      // 4. 精確殘基接觸與作用力分析 (主鏈與側鏈皆檢驗真實氫鍵，避免大半徑粗暴抓取)
       const contactedDnaResnos = new Set();
       const pairInteractionMap = new Map(); // key: "idx1_idx2", value: { pair, isSaltBridge: bool, isHbond: bool }
+      const isSidechainAtom = (atomName) => !['N', 'CA', 'C', 'O', 'OXT'].includes(atomName);
 
       targetPdbResnos.forEach(pResno => {
         const pRes = protResidueMap.get(pResno);
@@ -906,24 +907,7 @@
 
         dnaResidueMap.forEach(dRes => {
           const dAtoms = dRes.atoms;
-
-          // 核心特寫模式下：只要任何蛋白質原子與 DNA 原子 (含糖/磷酸/鹼基) 距離 <= 4.5 Å 即判定接觸
-          if (appState.focusMode === 'motif') {
-            let hasCloseContact = false;
-            for (const pn of Object.keys(pAtoms)) {
-              for (const dn of Object.keys(dAtoms)) {
-                const dist = Math.hypot(pAtoms[pn].x - dAtoms[dn].x, pAtoms[pn].y - dAtoms[dn].y, pAtoms[pn].z - dAtoms[dn].z);
-                if (dist <= 4.5) {
-                  hasCloseContact = true;
-                  break;
-                }
-              }
-              if (hasCloseContact) break;
-            }
-            if (hasCloseContact) {
-              contactedDnaResnos.add(dRes.resno);
-            }
-          }
+          let hasDirectContact = false;
 
           // A. 鹽橋判定：Lys NZ / Arg NH1,NH2,NE 與 磷酸基 OP1, OP2 (距離 <= 4.0 Å)
           const posNitrogens = ['NZ', 'NH1', 'NH2', 'NE'];
@@ -934,7 +918,7 @@
                 if (dAtoms[po]) {
                   const d2 = Math.hypot(pAtoms[pn].x - dAtoms[po].x, pAtoms[pn].y - dAtoms[po].y, pAtoms[pn].z - dAtoms[po].z);
                   if (d2 <= 4.0) {
-                    contactedDnaResnos.add(dRes.resno);
+                    hasDirectContact = true;
                     const pair = [pAtoms[pn].index, dAtoms[po].index];
                     const key = `${pAtoms[pn].index}_${dAtoms[po].index}`;
                     if (!pairInteractionMap.has(key)) {
@@ -948,8 +932,8 @@
             }
           });
 
-          // B. 氫鍵判定 (含距離與夾角)
-          // B1: 蛋白質為供體
+          // B. 氫鍵判定 (含主鏈 N-H..O 與側鏈供體)
+          // B1: 蛋白質為供體 (主鏈與側鏈皆檢驗)
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
@@ -959,6 +943,7 @@
             if (pAtoms['H']) {
               virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
             } else if (pName === 'N' && pAtoms['CA']) {
+              // 主鏈醯胺氫 (主鏈參與結合的關鍵氫鍵來源)
               const vx = pAtom.x - pAtoms['CA'].x, vy = pAtom.y - pAtoms['CA'].y, vz = pAtom.z - pAtoms['CA'].z;
               const vl = Math.hypot(vx, vy, vz) || 1;
               virtualH = [pAtom.x + (vx / vl) * 1.0, pAtom.y + (vy / vl) * 1.0, pAtom.z + (vz / vl) * 1.0];
@@ -996,7 +981,7 @@
               }
 
               if (hbondFormed) {
-                contactedDnaResnos.add(dRes.resno);
+                hasDirectContact = true;
                 const pair = [pAtom.index, dAtom.index];
                 const key = `${pAtom.index}_${dAtom.index}`;
                 if (!pairInteractionMap.has(key)) {
@@ -1008,7 +993,7 @@
             });
           });
 
-          // B2: DNA 為供體
+          // B2: DNA 鹼基為供體
           const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
           dnaDonors.forEach(dName => {
             const dAtom = dAtoms[dName];
@@ -1040,7 +1025,7 @@
               }
 
               if (hbondFormed) {
-                contactedDnaResnos.add(dRes.resno);
+                hasDirectContact = true;
                 const pair = [dAtom.index, pAtom.index];
                 const key = `${pAtom.index}_${dAtom.index}`;
                 if (!pairInteractionMap.has(key)) {
@@ -1051,6 +1036,26 @@
               }
             });
           });
+
+          // C. 核心特寫模式：側鏈與 DNA 近距離凡得瓦/疏水性堆積接觸 (限制 <= 3.6 Å 且排除主鏈掠過)
+          if (appState.focusMode === 'motif' && !hasDirectContact) {
+            for (const pn of Object.keys(pAtoms)) {
+              if (!isSidechainAtom(pn)) continue; // 排除主鏈 C, CA, N, O
+              for (const dn of Object.keys(dAtoms)) {
+                const dist = Math.hypot(pAtoms[pn].x - dAtoms[dn].x, pAtoms[pn].y - dAtoms[dn].y, pAtoms[pn].z - dAtoms[dn].z);
+                if (dist <= 3.6) {
+                  hasDirectContact = true;
+                  break;
+                }
+              }
+              if (hasDirectContact) break;
+            }
+          }
+
+          // 只有確定有鍵結或近距側鏈作用才轉成 Licorice
+          if (hasDirectContact) {
+            contactedDnaResnos.add(dRes.resno);
+          }
         });
       });
 
@@ -1069,14 +1074,14 @@
         ? [...targetPdbResnos, ...dResArr].join(' or ')
         : 'nucleic';
 
-      // 依據布林狀態分類配對
+      // 依布林狀態分類配對 (鹽橋與氫鍵不互斥)
       const sbOnly = [];
       const sbAndHb = [];
       const hbOnly = [];
 
       pairInteractionMap.forEach(val => {
         if (val.isSaltBridge && val.isHbond) {
-          sbAndHb.push(val.pair);
+          sbAndHb.push(val.pair); // 重疊：虛線粉紅 / 數字黃
         } else if (val.isSaltBridge) {
           sbOnly.push(val.pair);
         } else if (val.isHbond) {
@@ -1303,7 +1308,7 @@
           });
         }
 
-        // 作用力 2: 同時符合鹽橋與氫鍵 (虛線保持鹽橋粉紅，文字為氫鍵黃色)
+        // 作用力 2: 同時符合鹽橋與氫鍵 (虛線保持鹽橋粉紅，文字轉為氫鍵黃色)
         if (appState.interactionPairs.saltBridgeAndHbond.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.interactionPairs.saltBridgeAndHbond,
