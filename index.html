@@ -63,7 +63,6 @@
       accent-color: #38bdf8;
     }
 
-    /* 手勢水平輕擺動畫 */
     @keyframes sway {
       0%, 100% { transform: translateX(0); }
       50% { transform: translateX(6px); }
@@ -72,14 +71,13 @@
       animation: sway 1.4s ease-in-out infinite;
     }
 
-    /* 解決 Android / iOS 底部虛擬按鍵與導覽列遮擋問題 */
     .bottom-safe-timeline {
       bottom: calc(48px + env(safe-area-inset-bottom, 0px));
     }
 
     @media (min-width: 640px) {
       .bottom-safe-timeline {
-        bottom: 0.75rem; /* 電腦與平板維持原本 12px 距離 */
+        bottom: 0.75rem;
       }
     }
   </style>
@@ -89,7 +87,7 @@
   <!-- 3D 渲染視窗 -->
   <div id="viewport" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
 
-  <!-- 極簡互動提示（播放開始時顯示，使用者觸碰或2.8秒後自動淡出） -->
+  <!-- 極簡互動提示 -->
   <div id="gesture-hint" class="absolute bottom-28 sm:bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none transition-all duration-700 opacity-0 translate-y-2 flex items-center space-x-2 bg-slate-950/85 backdrop-blur-md border border-cyan-400/40 px-3.5 py-1.5 rounded-full text-xs text-cyan-200 shadow-2xl">
     <i data-lucide="hand" class="w-4 h-4 text-cyan-400 animate-sway"></i>
     <span class="tracking-wide">按住拖曳視角 ｜ 滾輪或雙指縮放</span>
@@ -141,6 +139,10 @@
           <span class="w-2.5 h-0.5 bg-[#facc15] inline-block rounded"></span>
           <span class="text-yellow-300">氫鍵 (H-bond)</span>
         </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-0.5 bg-[#ec4899] border-b border-yellow-400 inline-block"></span>
+          <span class="text-slate-300 text-[9px]">重疊時: 虛線粉紅 / 數值黃</span>
+        </div>
       </div>
     </div>
     
@@ -164,7 +166,14 @@
 
     <!-- 右側：功能按鍵區 -->
     <div class="flex items-center space-x-1.5 pointer-events-auto shrink-0">
-      <button id="btn-focus-interface" title="接觸區嚴謹氫鍵/鹽橋分析" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
+      <!-- 核心 WRKYGQK 特寫按鈕 -->
+      <button id="btn-focus-motif" title="WRKYGQK 核心序列與接觸 DNA 殘基特寫" class="vmd-panel hover:bg-amber-950/60 border-amber-400/50 text-amber-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
+        <i data-lucide="sparkles" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400"></i>
+        <span id="focus-motif-btn-text">核心特寫</span>
+      </button>
+
+      <!-- 原特寫按鈕 (僅顯示 K117 和 T118) -->
+      <button id="btn-focus-interface" title="K117 & T118 接觸分析特寫" class="vmd-panel hover:bg-cyan-950/60 border-cyan-400/50 text-cyan-300 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold flex items-center space-x-1 transition shadow-lg">
         <i data-lucide="focus" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
         <span id="focus-btn-text">特寫</span>
       </button>
@@ -311,9 +320,10 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // 基準學術編號設定[cite: 1]
-    const STANDARD_ANCHOR_W = 108;            // WRKYGQK 的 W 在標準序列中是 108[cite: 1]
-    const TARGET_DISPLAY_RESNOS = [114, 117, 118]; // 自訂欲追蹤展示的標準殘基清單[cite: 1]
+    // 基準學術編號設定
+    const STANDARD_ANCHOR_W = 108;               // WRKYGQK 的 W 在標準序列中是 108
+    const TARGET_DISPLAY_RESNOS = [117, 118];    // 特寫：僅顯示 K117 和 T118
+    const MOTIF_RESNOS = [108, 109, 110, 111, 112, 113, 114]; // 核心 WRKYGQK 殘基 (W108 ~ K114)
 
     const FIXED_TOTAL_NS = 100.0;
 
@@ -337,9 +347,12 @@
       ssSchemeIds: null,
       strandT: new Map(),
       dnaStyle: 'vmd_ladder',
-      dnaColor: '#7dd3fc', // 預設水藍色骨架[cite: 1]
+      dnaColor: '#7dd3fc',
       showBaseLabels: false,
-      isFocusingInterface: false,
+      
+      // 特寫狀態
+      focusMode: 'none', // 'none' | 'interface' (K117/T118) | 'motif' (WRKYGQK)
+      
       dnaStrandSelections: [],
       dnaRungStubs: [],
       ladderShapeComp: null,
@@ -351,8 +364,9 @@
       contactDnaSele: '',
       focusViewSele: '',
       interactionPairs: {
-        saltBridge: [],
-        hbond: []
+        saltBridgeOnly: [],
+        saltBridgeAndHbond: [],
+        hbondOnly: []
       },
       
       zincAtomIndex: -1,
@@ -392,6 +406,8 @@
       btnResetView: document.getElementById('btn-reset-view'),
       btnFocusInterface: document.getElementById('btn-focus-interface'),
       focusBtnText: document.getElementById('focus-btn-text'),
+      btnFocusMotif: document.getElementById('btn-focus-motif'),
+      focusMotifBtnText: document.getElementById('focus-motif-btn-text'),
       btnToggleRep: document.getElementById('btn-toggle-rep'),
       repModal: document.getElementById('rep-modal'),
       btnCloseRep: document.getElementById('btn-close-rep')
@@ -407,12 +423,9 @@
       dom.loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    // 輕量手勢操作提示（顯示2.8秒或點擊後自動淡出）
     function showGestureHintOnce() {
       if (appState.hasShownHint || !dom.gestureHint) return;
       appState.hasShownHint = true;
-
-      // 顯示
       dom.gestureHint.classList.remove('opacity-0', 'translate-y-2');
       dom.gestureHint.classList.add('opacity-100', 'translate-y-0');
 
@@ -423,22 +436,19 @@
         dom.gestureHint.classList.add('opacity-0', 'translate-y-2');
         window.removeEventListener('pointerdown', dismiss);
       };
-
       window.addEventListener('pointerdown', dismiss);
       timer = setTimeout(dismiss, 2800);
     }
 
-    // 簡潔白話顯示檔名，並過濾掉技術性字眼
     function formatSimpleFileName(rawName) {
       return rawName.replace(/\.pdb$/i, '').replace(/[-_]/g, ' ');
     }
 
-    // 判斷是否為靜態結構 (能量最小化) 或 MD 軌跡
     function isStaticPdb(name) {
       const lower = name.toLowerCase();
       if (/min|em|minimize|dock|complex|model|static/i.test(lower)) return true;
       if (/traj|md|movie|sim|prod|run|dcd/i.test(lower)) return false;
-      return true; // 預設視為靜態
+      return true;
     }
 
     async function scanFolderFiles() {
@@ -512,12 +522,10 @@
       return { colorScheme: colorVal };
     }
 
-    // 註冊自訂配色方案
     function registerCustomColorSchemes() {
       const rgb = c => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
       const toInt = v => (Math.round(v[0]) << 16) | (Math.round(v[1]) << 8) | Math.round(v[2]);
 
-      // 1. PyMOL 二級結構配色 (螺旋紅/摺疊黃/Loop 綠)[cite: 1]
       const makeSS = (helix, sheet, loop) => {
         const light = rgb(sheet).map(v => v + (255 - v) * 0.65);
         const dark = rgb(sheet).map(v => v * 0.78);
@@ -732,7 +740,7 @@
     }
 
     /**
-     * 動態全接觸分析（幾何角度真氫鍵與鹽橋判斷）
+     * 動態接觸與作用力分析
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
@@ -831,7 +839,7 @@
         }));
       }
 
-      // 2. 蛋白質序列對齊 W=108 計算 offset[cite: 1]
+      // 2. 蛋白質序列對齊 W=108 計算 offset
       const protResList = [];
       const protResidueMap = new Map();
 
@@ -859,15 +867,17 @@
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      // 3. 取得目標殘基[cite: 1]
+      // 3. 根據目前特寫模式選定焦點目標殘基清單
+      const currentStandardList = (appState.focusMode === 'motif')
+        ? MOTIF_RESNOS
+        : TARGET_DISPLAY_RESNOS; // interface 模式 (K117 & T118)
+
       const targetPdbResnos = [];
       const labelsData = [];
-      const targetResnoSet = new Set();
 
-      TARGET_DISPLAY_RESNOS.forEach(stdNo => {
+      currentStandardList.forEach(stdNo => {
         const actualResnoInPdb = stdNo - deltaOffset;
         targetPdbResnos.push(actualResnoInPdb);
-        targetResnoSet.add(actualResnoInPdb);
 
         const matchRes = protResList.find(r => r.resno === actualResnoInPdb);
         const resCode3 = matchRes ? (matchRes.resname[0] + matchRes.resname.slice(1).toLowerCase()) : 'Res';
@@ -885,10 +895,9 @@
       appState.focusTargetResnosInPdb = targetPdbResnos;
       appState.focusLabelsData = labelsData;
 
-      // 4. 一視同仁：遍歷目標殘基與 DNA 所有原子進行幾何判斷 (鹽橋 + 幾何角度氫鍵)
+      // 4. 殘基接觸與作用力分析 (鹽橋與氫鍵不互斥)
       const contactedDnaResnos = new Set();
-      const saltBridges = [];
-      const hbonds = [];
+      const pairInteractionMap = new Map(); // key: "idx1_idx2", value: { pair, isSaltBridge: bool, isHbond: bool }
 
       targetPdbResnos.forEach(pResno => {
         const pRes = protResidueMap.get(pResno);
@@ -897,6 +906,24 @@
 
         dnaResidueMap.forEach(dRes => {
           const dAtoms = dRes.atoms;
+
+          // 核心特寫模式下：只要任何蛋白質原子與 DNA 原子 (含糖/磷酸/鹼基) 距離 <= 4.5 Å 即判定接觸
+          if (appState.focusMode === 'motif') {
+            let hasCloseContact = false;
+            for (const pn of Object.keys(pAtoms)) {
+              for (const dn of Object.keys(dAtoms)) {
+                const dist = Math.hypot(pAtoms[pn].x - dAtoms[dn].x, pAtoms[pn].y - dAtoms[dn].y, pAtoms[pn].z - dAtoms[dn].z);
+                if (dist <= 4.5) {
+                  hasCloseContact = true;
+                  break;
+                }
+              }
+              if (hasCloseContact) break;
+            }
+            if (hasCloseContact) {
+              contactedDnaResnos.add(dRes.resno);
+            }
+          }
 
           // A. 鹽橋判定：Lys NZ / Arg NH1,NH2,NE 與 磷酸基 OP1, OP2 (距離 <= 4.0 Å)
           const posNitrogens = ['NZ', 'NH1', 'NH2', 'NE'];
@@ -908,21 +935,26 @@
                   const d2 = Math.hypot(pAtoms[pn].x - dAtoms[po].x, pAtoms[pn].y - dAtoms[po].y, pAtoms[pn].z - dAtoms[po].z);
                   if (d2 <= 4.0) {
                     contactedDnaResnos.add(dRes.resno);
-                    saltBridges.push([pAtoms[pn].index, dAtoms[po].index]);
+                    const pair = [pAtoms[pn].index, dAtoms[po].index];
+                    const key = `${pAtoms[pn].index}_${dAtoms[po].index}`;
+                    if (!pairInteractionMap.has(key)) {
+                      pairInteractionMap.set(key, { pair, isSaltBridge: true, isHbond: false });
+                    } else {
+                      pairInteractionMap.get(key).isSaltBridge = true;
+                    }
                   }
                 }
               });
             }
           });
 
-          // B. 氫鍵判定 (兼顧立體化學嚴謹性與側鏈旋轉自由度)
-          // 情況 1：蛋白質為供體 (Protein Donor: N/O -> DNA Acceptor: O/N)
+          // B. 氫鍵判定 (含距離與夾角)
+          // B1: 蛋白質為供體
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
 
             const isFlexibleDonor = ['NZ', 'NH1', 'NH2', 'NE'].includes(pName);
-
             let virtualH = null;
             if (pAtoms['H']) {
               virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
@@ -941,8 +973,8 @@
               if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
 
               const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
+              let hbondFormed = false;
 
-              // 針對 Lys NZ / Arg 等多氫基團：距離 <= 3.5 Å 且受體不在 C-N 反方向
               if (isFlexibleDonor) {
                 if (distDA <= 3.5) {
                   let isValidAngle = true;
@@ -951,32 +983,32 @@
                     const coneAngle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], [pAtom.x, pAtom.y, pAtom.z], [prevC.x, prevC.y, prevC.z]);
                     if (coneAngle < 80.0) isValidAngle = false;
                   }
-                  if (isValidAngle) {
-                    contactedDnaResnos.add(dRes.resno);
-                    hbonds.push([pAtom.index, dAtom.index]);
-                  }
+                  if (isValidAngle) hbondFormed = true;
                 }
-                return;
-              }
-
-              // 針對主鏈或剛性供體：檢查 D-H..A 夾角 >= 120°
-              if (distDA <= 3.6) {
+              } else if (distDA <= 3.6) {
                 if (virtualH) {
                   const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
                   const angle = calcAngleDeg([pAtom.x, pAtom.y, pAtom.z], virtualH, [dAtom.x, dAtom.y, dAtom.z]);
-                  if (angle >= 120.0 && distHA <= 2.6) {
-                    contactedDnaResnos.add(dRes.resno);
-                    hbonds.push([pAtom.index, dAtom.index]);
-                  }
+                  if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
                 } else if (distDA <= 3.2) {
-                  contactedDnaResnos.add(dRes.resno);
-                  hbonds.push([pAtom.index, dAtom.index]);
+                  hbondFormed = true;
+                }
+              }
+
+              if (hbondFormed) {
+                contactedDnaResnos.add(dRes.resno);
+                const pair = [pAtom.index, dAtom.index];
+                const key = `${pAtom.index}_${dAtom.index}`;
+                if (!pairInteractionMap.has(key)) {
+                  pairInteractionMap.set(key, { pair, isSaltBridge: false, isHbond: true });
+                } else {
+                  pairInteractionMap.get(key).isHbond = true;
                 }
               }
             });
           });
 
-          // 情況 2：DNA 為供體 (DNA Base N-H -> Protein Acceptor: O/N)
+          // B2: DNA 為供體
           const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
           dnaDonors.forEach(dName => {
             const dAtom = dAtoms[dName];
@@ -995,17 +1027,26 @@
               if (pAtom.element !== 'O' && pAtom.element !== 'N') return;
 
               const distDA = Math.hypot(dAtom.x - pAtom.x, dAtom.y - pAtom.y, dAtom.z - pAtom.z);
+              let hbondFormed = false;
+
               if (distDA <= 3.6) {
                 if (vH) {
                   const distHA = Math.hypot(vH[0] - pAtom.x, vH[1] - pAtom.y, vH[2] - pAtom.z);
                   const angle = calcAngleDeg([dAtom.x, dAtom.y, dAtom.z], vH, [pAtom.x, pAtom.y, pAtom.z]);
-                  if (angle >= 120.0 && distHA <= 2.6) {
-                    contactedDnaResnos.add(dRes.resno);
-                    hbonds.push([pAtom.index, dAtom.index]);
-                  }
+                  if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
                 } else if (distDA <= 3.2) {
-                  contactedDnaResnos.add(dRes.resno);
-                  hbonds.push([pAtom.index, dAtom.index]);
+                  hbondFormed = true;
+                }
+              }
+
+              if (hbondFormed) {
+                contactedDnaResnos.add(dRes.resno);
+                const pair = [dAtom.index, pAtom.index];
+                const key = `${pAtom.index}_${dAtom.index}`;
+                if (!pairInteractionMap.has(key)) {
+                  pairInteractionMap.set(key, { pair, isSaltBridge: false, isHbond: true });
+                } else {
+                  pairInteractionMap.get(key).isHbond = true;
                 }
               }
             });
@@ -1028,9 +1069,25 @@
         ? [...targetPdbResnos, ...dResArr].join(' or ')
         : 'nucleic';
 
+      // 依據布林狀態分類配對
+      const sbOnly = [];
+      const sbAndHb = [];
+      const hbOnly = [];
+
+      pairInteractionMap.forEach(val => {
+        if (val.isSaltBridge && val.isHbond) {
+          sbAndHb.push(val.pair);
+        } else if (val.isSaltBridge) {
+          sbOnly.push(val.pair);
+        } else if (val.isHbond) {
+          hbOnly.push(val.pair);
+        }
+      });
+
       appState.interactionPairs = {
-        saltBridge: saltBridges,
-        hbond: hbonds
+        saltBridgeOnly: sbOnly,
+        saltBridgeAndHbond: sbAndHb,
+        hbondOnly: hbOnly
       };
     }
 
@@ -1055,7 +1112,8 @@
       const pColorParams = getColorParams(appState.protColor);
       const dColorParams = getColorParams(appState.dnaColor);
 
-      const bgOpacity = appState.isFocusingInterface ? 0.22 : 1.0;
+      const isAnyFocus = (appState.focusMode !== 'none');
+      const bgOpacity = isAnyFocus ? 0.22 : 1.0;
 
       // 1. 蛋白質主體
       const protSele = 'protein and not hydrogen and not (_ZN or :ZN or [ZN] or zinc)';
@@ -1185,8 +1243,9 @@
         });
       }
 
-      // 6. 接觸面特寫
-      if (appState.isFocusingInterface) {
+      // 6. 特寫呈現 (interface 或 motif 模式)
+      if (isAnyFocus) {
+        // 焦點蛋白質殘基 Licorice
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
@@ -1206,7 +1265,7 @@
                 textShape.addText(
                   [atomProxy.x, atomProxy.y + 1.2, atomProxy.z],
                   [0.22, 0.74, 0.97],
-                  1.5,
+                  1.4,
                   item.text
                 );
               }
@@ -1217,6 +1276,7 @@
           }
         }
 
+        // 接觸 DNA 殘基 (包含碰到的鹼基/糖/磷酸) Licorice
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
@@ -1227,10 +1287,10 @@
           });
         }
 
-        // 鹽橋 (洋紅色粗虛線 #ec4899)
-        if (appState.interactionPairs.saltBridge.length > 0) {
+        // 作用力 1: 純鹽橋 (虛線粉紅、文字粉紅)
+        if (appState.interactionPairs.saltBridgeOnly.length > 0) {
           appState.component.addRepresentation('distance', {
-            atomPair: appState.interactionPairs.saltBridge,
+            atomPair: appState.interactionPairs.saltBridgeOnly,
             color: '#ec4899',
             radius: 0.09,
             dashLength: 0.25,
@@ -1243,10 +1303,26 @@
           });
         }
 
-        // 嚴謹氫鍵 (金黃色細虛線 #facc15)
-        if (appState.interactionPairs.hbond.length > 0) {
+        // 作用力 2: 同時符合鹽橋與氫鍵 (虛線保持鹽橋粉紅，文字為氫鍵黃色)
+        if (appState.interactionPairs.saltBridgeAndHbond.length > 0) {
           appState.component.addRepresentation('distance', {
-            atomPair: appState.interactionPairs.hbond,
+            atomPair: appState.interactionPairs.saltBridgeAndHbond,
+            color: '#ec4899',
+            radius: 0.09,
+            dashLength: 0.25,
+            labelUnit: 'angstrom',
+            labelColor: '#facc15', // 氫鍵黃色文字
+            labelSize: 1.3,
+            labelBackground: true,
+            labelBackgroundColor: '#0b0f19',
+            labelBackgroundMargin: 0.1
+          });
+        }
+
+        // 作用力 3: 純氫鍵 (虛線黃色、文字黃色)
+        if (appState.interactionPairs.hbondOnly.length > 0) {
+          appState.component.addRepresentation('distance', {
+            atomPair: appState.interactionPairs.hbondOnly,
             color: '#facc15',
             radius: 0.07,
             dashLength: 0.2,
@@ -1267,22 +1343,54 @@
       }
     }
 
+    function syncFocusButtonsUI() {
+      if (appState.focusMode === 'interface') {
+        dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
+        dom.focusBtnText.textContent = '重設視角';
+        dom.btnFocusMotif.classList.remove('bg-amber-500/25', 'border-amber-400');
+        dom.focusMotifBtnText.textContent = '核心特寫';
+      } else if (appState.focusMode === 'motif') {
+        dom.btnFocusMotif.classList.add('bg-amber-500/25', 'border-amber-400');
+        dom.focusMotifBtnText.textContent = '重設視角';
+        dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
+        dom.focusBtnText.textContent = '特寫';
+      } else {
+        dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
+        dom.focusBtnText.textContent = '特寫';
+        dom.btnFocusMotif.classList.remove('bg-amber-500/25', 'border-amber-400');
+        dom.focusMotifBtnText.textContent = '核心特寫';
+      }
+    }
+
     function toggleFocusInterface() {
       if (!appState.component) return;
-      appState.isFocusingInterface = !appState.isFocusingInterface;
+      appState.focusMode = (appState.focusMode === 'interface') ? 'none' : 'interface';
 
       analyzeStructureDynamically(appState.component.structure);
       applyAllRepresentations();
+      syncFocusButtonsUI();
 
-      if (appState.isFocusingInterface) {
+      if (appState.focusMode === 'interface') {
         const viewTarget = appState.focusViewSele || 'not protein and not hydrogen';
         appState.component.autoView(viewTarget, 800);
-        dom.btnFocusInterface.classList.add('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '重設視角';
       } else {
         appState.component.autoView(600);
-        dom.btnFocusInterface.classList.remove('bg-cyan-500/25', 'border-cyan-400');
-        dom.focusBtnText.textContent = '特寫';
+      }
+    }
+
+    function toggleFocusMotif() {
+      if (!appState.component) return;
+      appState.focusMode = (appState.focusMode === 'motif') ? 'none' : 'motif';
+
+      analyzeStructureDynamically(appState.component.structure);
+      applyAllRepresentations();
+      syncFocusButtonsUI();
+
+      if (appState.focusMode === 'motif') {
+        const viewTarget = appState.focusViewSele || 'not protein and not hydrogen';
+        appState.component.autoView(viewTarget, 800);
+      } else {
+        appState.component.autoView(600);
       }
     }
 
@@ -1307,7 +1415,7 @@
       dom.sliderCurr.textContent = f;
       updateTimeDisplay(f);
 
-      if (appState.isFocusingInterface || appState.dnaStyle === 'vmd_ladder') {
+      if (appState.focusMode !== 'none' || appState.dnaStyle === 'vmd_ladder') {
         analyzeStructureDynamically(appState.component.structure);
         applyAllRepresentations();
       }
@@ -1422,7 +1530,6 @@
             dom.bottomTimeline.classList.add('flex');
             setFrame(0);
             startPlayback();
-            // 動態軌跡成功播映時，呈現極簡手勢操作提示（2.8秒後自動淡出）
             showGestureHintOnce();
           } else {
             appState.totalFrames = 1;
@@ -1430,7 +1537,6 @@
             dom.bottomTimeline.classList.add('hidden');
             dom.bottomTimeline.classList.remove('flex');
             stopPlayback();
-            // 靜態結構同樣顯示一次手勢提示
             showGestureHintOnce();
           }
         }
@@ -1508,6 +1614,7 @@
       });
 
       dom.btnFocusInterface.addEventListener('click', toggleFocusInterface);
+      dom.btnFocusMotif.addEventListener('click', toggleFocusMotif);
 
       dom.btnToggleRep.addEventListener('click', () => {
         dom.repModal.classList.toggle('hidden');
