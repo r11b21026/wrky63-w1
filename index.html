@@ -105,12 +105,11 @@
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-2 left-2 right-2 sm:top-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-<!-- 1. DNA 鹼基顏色（右上，手機版精簡為小橫條或下移） -->
+<!-- 1. DNA 鹼基顏色（右上） -->
 <div id="base-legend" class="absolute top-20 right-2 sm:top-14 sm:right-4 z-20 vmd-panel rounded-lg sm:rounded-xl px-2 py-1 sm:px-3 sm:py-2 flex flex-col space-y-1 pointer-events-auto border border-slate-700/60 shadow-lg text-[10px] sm:text-[11px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
   <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-0.5">
     DNA 鹼基
   </div>
-  <!-- 手機版只顯示 A T C G 點，省去冗長中文；桌機版顯示完整名稱 -->
   <div class="grid grid-cols-2 gap-x-2 gap-y-0.5">
     <div class="flex items-center space-x-1">
       <span class="w-2 h-2 rounded-full" style="background-color: #3859F2;"></span>
@@ -131,12 +130,12 @@
   </div>
 </div>
 
-<!-- 2. 鍵結圖例（手機版挪到左下方或底部，桌機版跟在右上面板旁或隱藏整合） -->
+<!-- 2. 鍵結圖例（手機在左下角，桌機在右上角下方，含重疊說明） -->
 <div id="bond-legend" class="absolute bottom-4 left-2 sm:top-36 sm:right-4 sm:bottom-auto sm:left-auto z-20 vmd-panel rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex flex-col space-y-1 pointer-events-auto border border-slate-700/60 shadow-lg text-[10px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
   <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold border-b border-slate-700/50 pb-0.5">
     鍵結圖例
   </div>
-  <div class="flex flex-col space-y-0.5">
+  <div class="flex flex-col space-y-1">
     <div class="flex items-center space-x-1.5">
       <span class="w-2.5 h-0.5 bg-[#ec4899] inline-block rounded"></span>
       <span class="text-pink-300">鹽橋</span>
@@ -144,6 +143,10 @@
     <div class="flex items-center space-x-1.5">
       <span class="w-2.5 h-0.5 bg-[#facc15] inline-block rounded"></span>
       <span class="text-yellow-300">氫鍵</span>
+    </div>
+    <div class="flex items-center space-x-1.5 pt-0.5 border-t border-slate-800">
+      <span class="w-2.5 h-0.5 bg-[#ec4899] border-b border-yellow-400 inline-block"></span>
+      <span class="text-slate-300 text-[9px] leading-tight">重疊: 虛線粉紅 / 數值黃</span>
     </div>
   </div>
 </div>
