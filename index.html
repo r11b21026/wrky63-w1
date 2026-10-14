@@ -105,49 +105,62 @@
   <!-- 頂部資訊列與切換器 -->
   <header class="absolute top-2 left-2 right-2 sm:top-3 sm:left-4 sm:right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
     
-<!-- 1. DNA 鹼基顏色（右上） -->
-<div id="base-legend" class="absolute top-20 right-2 sm:top-14 sm:right-4 z-20 vmd-panel rounded-lg sm:rounded-xl px-2 py-1 sm:px-3 sm:py-2 flex flex-col space-y-1 pointer-events-auto border border-slate-700/60 shadow-lg text-[10px] sm:text-[11px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
-  <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-0.5">
-    DNA 鹼基
-  </div>
-  <div class="grid grid-cols-2 gap-x-2 gap-y-0.5">
-    <div class="flex items-center space-x-1">
-      <span class="w-2 h-2 rounded-full" style="background-color: #3859F2;"></span>
-      <span class="text-slate-200">A<span class="hidden sm:inline text-[9px] text-slate-400"> (腺)</span></span>
+<!-- 鹼基與鍵結顏色圖例 (防擋按鈕、自適應橫向排版版) -->
+<div id="base-legend" class="absolute top-16 right-2 sm:top-14 sm:right-4 z-20 vmd-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 pointer-events-auto border border-slate-700/60 shadow-lg text-[10px] sm:text-[11px] font-mono-vmd bg-slate-950/90 backdrop-blur-md max-w-[calc(100vw-1rem)]">
+  
+  <!-- 手機版採左右兩欄並排 (flex-row)，桌機版上下排列 (sm:flex-col)；省下超過一半的垂直高度！ -->
+  <div class="flex flex-row sm:flex-col items-start gap-2.5 sm:gap-1.5">
+    
+    <!-- 1. DNA 鹼基區塊 -->
+    <div class="flex flex-col space-y-1">
+      <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider border-b border-slate-700/50 pb-0.5">
+        DNA 鹼基
+      </div>
+      <div class="grid grid-cols-2 gap-x-2 gap-y-0.5">
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: #3859F2;"></span>
+          <span class="text-slate-200">A<span class="hidden sm:inline text-[9px] text-slate-400">(腺)</span></span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: #EB4759;"></span>
+          <span class="text-slate-200">T<span class="hidden sm:inline text-[9px] text-slate-400">(胸)</span></span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: #F29433;"></span>
+          <span class="text-slate-200">C<span class="hidden sm:inline text-[9px] text-slate-400">(胞)</span></span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full shrink-0" style="background-color: #26CC40;"></span>
+          <span class="text-slate-200">G<span class="hidden sm:inline text-[9px] text-slate-400">(鳥)</span></span>
+        </div>
+      </div>
     </div>
-    <div class="flex items-center space-x-1">
-      <span class="w-2 h-2 rounded-full" style="background-color: #EB4759;"></span>
-      <span class="text-slate-200">T<span class="hidden sm:inline text-[9px] text-slate-400"> (胸)</span></span>
-    </div>
-    <div class="flex items-center space-x-1">
-      <span class="w-2 h-2 rounded-full" style="background-color: #F29433;"></span>
-      <span class="text-slate-200">C<span class="hidden sm:inline text-[9px] text-slate-400"> (胞)</span></span>
-    </div>
-    <div class="flex items-center space-x-1">
-      <span class="w-2 h-2 rounded-full" style="background-color: #26CC40;"></span>
-      <span class="text-slate-200">G<span class="hidden sm:inline text-[9px] text-slate-400"> (鳥)</span></span>
-    </div>
-  </div>
-</div>
 
-<!-- 2. 鍵結圖例（手機在左下角，桌機在右上角下方，含重疊說明） -->
-<div id="bond-legend" class="absolute bottom-4 left-2 sm:top-36 sm:right-4 sm:bottom-auto sm:left-auto z-20 vmd-panel rounded-lg sm:rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 flex flex-col space-y-1 pointer-events-auto border border-slate-700/60 shadow-lg text-[10px] font-mono-vmd bg-slate-950/85 backdrop-blur-md">
-  <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold border-b border-slate-700/50 pb-0.5">
-    鍵結圖例
-  </div>
-  <div class="flex flex-col space-y-1">
-    <div class="flex items-center space-x-1.5">
-      <span class="w-2.5 h-0.5 bg-[#ec4899] inline-block rounded"></span>
-      <span class="text-pink-300">鹽橋</span>
+    <!-- 分隔線：手機版為垂直線 (border-l)，桌機版為水平線 (sm:border-t) -->
+    <div class="hidden sm:block w-full border-t border-slate-700/50"></div>
+    <div class="block sm:hidden self-stretch border-l border-slate-700/50"></div>
+
+    <!-- 2. 鍵結圖例區塊 (包含重疊說明) -->
+    <div class="flex flex-col space-y-1 text-[10px]">
+      <div class="text-[9px] sm:text-[10px] text-slate-400 font-bold border-b border-slate-700/50 pb-0.5 sm:hidden">
+        鍵結
+      </div>
+      <div class="flex flex-col space-y-0.5">
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-0.5 bg-[#ec4899] shrink-0 inline-block rounded"></span>
+          <span class="text-pink-300">鹽橋</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+          <span class="w-2.5 h-0.5 bg-[#facc15] shrink-0 inline-block rounded"></span>
+          <span class="text-yellow-300">氫鍵</span>
+        </div>
+        <div class="flex items-center space-x-1 pt-0.5">
+          <span class="w-2.5 h-0.5 bg-[#ec4899] border-b border-yellow-400 shrink-0 inline-block"></span>
+          <span class="text-slate-300 text-[9px] leading-tight whitespace-nowrap">重疊: 虛線粉/數值黃</span>
+        </div>
+      </div>
     </div>
-    <div class="flex items-center space-x-1.5">
-      <span class="w-2.5 h-0.5 bg-[#facc15] inline-block rounded"></span>
-      <span class="text-yellow-300">氫鍵</span>
-    </div>
-    <div class="flex items-center space-x-1.5 pt-0.5 border-t border-slate-800">
-      <span class="w-2.5 h-0.5 bg-[#ec4899] border-b border-yellow-400 inline-block"></span>
-      <span class="text-slate-300 text-[9px] leading-tight">重疊: 虛線粉紅 / 數值黃</span>
-    </div>
+
   </div>
 </div>
     
