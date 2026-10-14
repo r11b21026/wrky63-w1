@@ -8,7 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide 圖示庫 -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- NGL Viewer WebGL 渲染引擎 -->
+  <!-- NGL Viewer WebGL 渲染引擎 (支援 .pdb.gz 原生解壓縮) -->
   <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.0-dev.37/dist/ngl.js"></script>
 
   <style>
@@ -156,7 +156,7 @@
       <div class="flex items-center space-x-1.5 min-w-0">
         <i data-lucide="folder" class="w-3.5 h-3.5 text-cyan-400 shrink-0"></i>
         <select id="file-selector" class="bg-slate-900 border border-cyan-500/40 text-cyan-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 w-full truncate cursor-pointer hover:bg-slate-800 transition">
-          <option value="" disabled selected>搜尋 PDB 檔案中...</option>
+          <option value="" disabled selected>搜尋結構檔案中...</option>
         </select>
         <button id="btn-refresh-files" title="重新整理目錄" class="p-1 text-slate-400 hover:text-cyan-300 rounded hover:bg-slate-800 transition shrink-0">
           <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
@@ -320,12 +320,13 @@
       'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
     };
 
-    // 基準學術編號設定[cite: 1]
-    const STANDARD_ANCHOR_W = 108;               // WRKYGQK 的 W 在標準序列中是 108[cite: 1]
-    const TARGET_DISPLAY_RESNOS = [117, 118];    // 特寫：僅顯示 K117 和 T118
+    // 基準學術編號設定
+    const STANDARD_ANCHOR_W = 108;               // WRKYGQK 的 W 在標準序列中為 108
+    const TARGET_DISPLAY_RESNOS = [117, 118];    // 特寫：K117 和 T118
     const MOTIF_RESNOS = [108, 109, 110, 111, 112, 113, 114]; // 核心 WRKYGQK 殘基 (W108 ~ K114)
 
-    const FIXED_TOTAL_NS = 100.0; //[cite: 1]
+    const START_NS = 50.0;
+    const END_NS = 100.0;
 
     const appState = {
       stage: null,
@@ -338,7 +339,7 @@
       loopMode: 'loop',
       direction: 1,
       timerId: null,
-      fps: 20,
+      fps: 12, // 平衡幀率：兼顧流暢度與慢動作觀察
       protStyle: 'cartoon',
       protColor: 'pymol_ss',
       ssMode: 'dssp',
@@ -347,10 +348,9 @@
       ssSchemeIds: null,
       strandT: new Map(),
       dnaStyle: 'vmd_ladder',
-      dnaColor: '#7dd3fc', //[cite: 1]
+      dnaColor: '#7dd3fc',
       showBaseLabels: false,
       
-      // 特寫狀態: 'none' | 'interface' (K117/T118) | 'motif' (W108-K114)
       focusMode: 'none',
       
       dnaStrandSelections: [],
@@ -441,7 +441,7 @@
     }
 
     function formatSimpleFileName(rawName) {
-      return rawName.replace(/\.pdb$/i, '').replace(/[-_]/g, ' ');
+      return rawName.replace(/(\.pdb|\.pdb\.gz)$/i, '').replace(/[-_]/g, ' ');
     }
 
     function isStaticPdb(name) {
@@ -462,7 +462,7 @@
         return;
       }
 
-      showLoading('搜尋 PDB 檔案中...', '請稍候');
+      showLoading('搜尋結構檔案中...', '支援 .pdb 與 .pdb.gz');
       let found = [];
 
       const hostname = window.location.hostname;
@@ -477,7 +477,10 @@
           if (res.ok) {
             const data = await res.json();
             found = data
-              .filter(item => item.type === 'file' && item.name.toLowerCase().endsWith('.pdb'))
+              .filter(item => {
+                const ln = item.name.toLowerCase();
+                return item.type === 'file' && (ln.endsWith('.pdb') || ln.endsWith('.pdb.gz'));
+              })
               .map(item => ({ name: item.name, url: item.name }));
           }
         } catch (e) {}
@@ -510,7 +513,7 @@
         hideLoading();
         loadPdbFile(firstUrl);
       } else {
-        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到 PDB 檔案 (請加 ?file=檔名.pdb)</option>';
+        dom.fileSelector.innerHTML = '<option value="" disabled selected>未偵測到結構檔案 (可加 ?file=檔名.pdb.gz)</option>';
         hideLoading();
       }
     }
@@ -740,15 +743,14 @@
     }
 
     /**
-     * 動態接觸與作用力分析 (保留完整 DNA 分股與梯子、鋅離子支援)
+     * 動態接觸與作用力分析
      */
     function analyzeStructureDynamically(structure) {
       const nucleicResList = [];
-      const nucleicAtoms = [];
       const dnaResidueMap = new Map();
       let zincIdx = -1;
 
-      // 1. 蒐集核酸原子與鋅離子 (保持完全不變)[cite: 1]
+      // 1. 蒐集核酸原子與鋅離子
       structure.eachResidue(r => {
         const rname = (r.resname || '').trim().toUpperCase();
         if (rname === 'ZN' || rname === 'ZN2' || rname === 'ZINC') {
@@ -764,16 +766,6 @@
           r.eachAtom(a => {
             const aname = a.atomname.trim();
             atomMap[aname] = { index: a.index, x: a.x, y: a.y, z: a.z, element: a.element };
-            if (a.element !== 'H') {
-              nucleicAtoms.push({
-                index: a.index,
-                atomname: aname,
-                element: a.element,
-                resno: a.resno,
-                resname: rname,
-                x: a.x, y: a.y, z: a.z
-              });
-            }
             if (aname === "O3'" || aname === "O3*") o3 = { x: a.x, y: a.y, z: a.z };
             if (aname === "P") {
               p = { x: a.x, y: a.y, z: a.z };
@@ -803,7 +795,7 @@
 
       appState.zincAtomIndex = zincIdx;
 
-      // DNA 階梯分股處理 (完全保留原邏輯)[cite: 1]
+      // DNA 階梯分股處理
       if (nucleicResList.length > 0) {
         const strandGroups = [];
         let curGroup = [nucleicResList[0]];
@@ -839,7 +831,7 @@
         }));
       }
 
-      // 2. 蛋白質序列對齊 W=108 計算 offset[cite: 1]
+      // 2. 蛋白質序列對齊 W=108 計算 offset
       const protResList = [];
       const protResidueMap = new Map();
 
@@ -867,10 +859,10 @@
         if (sampleW) deltaOffset = STANDARD_ANCHOR_W - sampleW.resno;
       }
 
-      // 3. 根據目前特寫模式選定焦點目標殘基清單
+      // 3. 焦點目標殘基清單
       const currentStandardList = (appState.focusMode === 'motif')
         ? MOTIF_RESNOS              // 核心序列 W108 ~ K114
-        : TARGET_DISPLAY_RESNOS;    // 特寫：僅 K117 和 T118
+        : TARGET_DISPLAY_RESNOS;    // 特寫：K117 和 T118
 
       const targetPdbResnos = [];
       const labelsData = [];
@@ -895,9 +887,9 @@
       appState.focusTargetResnosInPdb = targetPdbResnos;
       appState.focusLabelsData = labelsData;
 
-      // 4. 精確殘基接觸與作用力分析 (主鏈與側鏈皆檢驗真實氫鍵，避免大半徑粗暴抓取)
+      // 4. 精確殘基接觸與作用力分析
       const contactedDnaResnos = new Set();
-      const pairInteractionMap = new Map(); // key: "idx1_idx2", value: { pair, isSaltBridge: bool, isHbond: bool }
+      const pairInteractionMap = new Map();
       const isSidechainAtom = (atomName) => !['N', 'CA', 'C', 'O', 'OXT'].includes(atomName);
 
       targetPdbResnos.forEach(pResno => {
@@ -932,11 +924,7 @@
             }
           });
 
-// =========================================================================
-          // B. 氫鍵判定 (含主鏈 N-H..O 與側鏈供體 / 受體完備判定)
-          // =========================================================================
-
-          // 1. 定義具備多氫或可自由旋轉的極性供體清單 (徹底支援 Thr OG1, Ser OG, Lys NZ 等)
+          // B. 氫鍵判定 (含主鏈 N-H..O 與側鏈 Thr OG1, Ser OG 等可旋轉供體)
           const flexibleDonors = [
             'NZ',                // Lys (K27 / K117)
             'NH1', 'NH2', 'NE',  // Arg
@@ -948,9 +936,7 @@
             'ND2'                // Asn
           ];
 
-          // -------------------------------------------------------------------------
           // B1: 蛋白質為供體 (Protein Donor -> DNA Acceptor)
-          // -------------------------------------------------------------------------
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
@@ -958,7 +944,6 @@
             const isFlexible = flexibleDonors.includes(pName);
             let virtualH = null;
 
-            // 僅對剛性主鏈醯胺 N 計算假想氫 (Backbone N-H)，避免污染側鏈
             if (pName === 'N') {
               if (pAtoms['H']) {
                 virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
@@ -977,17 +962,14 @@
 
             Object.keys(dAtoms).forEach(dName => {
               const dAtom = dAtoms[dName];
-              // 受體必須為電負度高的 O 或 N
               if (dAtom.element !== 'O' && dAtom.element !== 'N') return;
 
               const distDA = Math.hypot(pAtom.x - dAtom.x, pAtom.y - dAtom.y, pAtom.z - dAtom.z);
               let hbondFormed = false;
 
               if (isFlexible) {
-                // 針對可旋轉側鏈 (如 T118 OG1 或 K117 NZ)，採用生化標準的 3.5 Å 幾何錐體判定
                 if (distDA <= 3.5) {
                   let isValidAngle = true;
-                  // 取得供體的前接碳原子，排除背向反折的不可行物理幾何
                   const prevC = pAtoms['CB'] || pAtoms['CE'] || pAtoms['CZ'] || pAtoms['CD'] || pAtoms['CG'];
                   if (prevC) {
                     const coneAngle = calcAngleDeg(
@@ -995,12 +977,11 @@
                       [pAtom.x, pAtom.y, pAtom.z],
                       [prevC.x, prevC.y, prevC.z]
                     );
-                    if (coneAngle < 75.0) isValidAngle = false; // 夾角過銳代表位阻不合理
+                    if (coneAngle < 75.0) isValidAngle = false;
                   }
                   if (isValidAngle) hbondFormed = true;
                 }
               } else if (distDA <= 3.6) {
-                // 針對主鏈 N 或具備固定方向的供體
                 if (virtualH) {
                   const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
                   const angle = calcAngleDeg(
@@ -1008,10 +989,8 @@
                     virtualH,
                     [dAtom.x, dAtom.y, dAtom.z]
                   );
-                  // 剛性氫鍵標準：D-H..A 角度 >= 120 度且 H..A <= 2.6 Å
                   if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
                 } else if (distDA <= 3.2) {
-                  // 無氫且非主鏈時的保守重原子距離判定
                   hbondFormed = true;
                 }
               }
@@ -1029,15 +1008,12 @@
             });
           });
 
-          // -------------------------------------------------------------------------
           // B2: DNA 鹼基為供體 (DNA Donor -> Protein Acceptor)
-          // -------------------------------------------------------------------------
           const dnaDonors = ['N1', 'N2', 'N3', 'N4', 'N6'];
           dnaDonors.forEach(dName => {
             const dAtom = dAtoms[dName];
             if (!dAtom) return;
 
-            // 尋找相鄰骨架碳原子推算假想氫
             let adjC = dAtoms['C2'] || dAtoms['C4'] || dAtoms['C6'];
             let vH = null;
             if (adjC) {
@@ -1086,10 +1062,10 @@
             });
           });
 
-          // C. 核心特寫模式：側鏈與 DNA 近距離凡得瓦/疏水性堆積接觸 (限制 <= 3.6 Å 且排除主鏈掠過)
+          // C. 核心特寫模式：側鏈與 DNA 近距離凡得瓦/疏水接觸
           if (appState.focusMode === 'motif' && !hasDirectContact) {
             for (const pn of Object.keys(pAtoms)) {
-              if (!isSidechainAtom(pn)) continue; // 排除主鏈 C, CA, N, O
+              if (!isSidechainAtom(pn)) continue;
               for (const dn of Object.keys(dAtoms)) {
                 const dist = Math.hypot(pAtoms[pn].x - dAtoms[dn].x, pAtoms[pn].y - dAtoms[dn].y, pAtoms[pn].z - dAtoms[dn].z);
                 if (dist <= 3.6) {
@@ -1101,7 +1077,6 @@
             }
           }
 
-          // 只有確定有鍵結或近距側鏈作用才轉成 Licorice
           if (hasDirectContact) {
             contactedDnaResnos.add(dRes.resno);
           }
@@ -1123,14 +1098,13 @@
         ? [...targetPdbResnos, ...dResArr].join(' or ')
         : 'nucleic';
 
-      // 依布林狀態分類配對 (鹽橋與氫鍵不互斥)
       const sbOnly = [];
       const sbAndHb = [];
       const hbOnly = [];
 
       pairInteractionMap.forEach(val => {
         if (val.isSaltBridge && val.isHbond) {
-          sbAndHb.push(val.pair); // 重疊：虛線粉紅 / 數字黃
+          sbAndHb.push(val.pair);
         } else if (val.isSaltBridge) {
           sbOnly.push(val.pair);
         } else if (val.isHbond) {
@@ -1299,7 +1273,6 @@
 
       // 6. 特寫呈現 (interface 或 motif 模式)
       if (isAnyFocus) {
-        // 焦點蛋白質殘基 Licorice
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
@@ -1330,7 +1303,6 @@
           }
         }
 
-        // 接觸 DNA 殘基 (包含碰到的鹼基/糖/磷酸) Licorice
         if (appState.contactDnaSele && appState.contactDnaSele !== 'none') {
           appState.component.addRepresentation('licorice', {
             sele: appState.contactDnaSele,
@@ -1341,7 +1313,6 @@
           });
         }
 
-        // 作用力 1: 純鹽橋 (虛線粉紅、文字粉紅)
         if (appState.interactionPairs.saltBridgeOnly.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.interactionPairs.saltBridgeOnly,
@@ -1357,7 +1328,6 @@
           });
         }
 
-        // 作用力 2: 同時符合鹽橋與氫鍵 (虛線保持鹽橋粉紅，文字轉為氫鍵黃色)
         if (appState.interactionPairs.saltBridgeAndHbond.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.interactionPairs.saltBridgeAndHbond,
@@ -1365,7 +1335,7 @@
             radius: 0.09,
             dashLength: 0.25,
             labelUnit: 'angstrom',
-            labelColor: '#facc15', // 氫鍵黃色文字
+            labelColor: '#facc15',
             labelSize: 1.3,
             labelBackground: true,
             labelBackgroundColor: '#0b0f19',
@@ -1373,7 +1343,6 @@
           });
         }
 
-        // 作用力 3: 純氫鍵 (虛線黃色、文字黃色)
         if (appState.interactionPairs.hbondOnly.length > 0) {
           appState.component.addRepresentation('distance', {
             atomPair: appState.interactionPairs.hbondOnly,
@@ -1450,10 +1419,10 @@
 
     function updateTimeDisplay(frame) {
       if (appState.totalFrames <= 1) {
-        dom.timeNsDisplay.textContent = '0.0 ns';
+        dom.timeNsDisplay.textContent = `${START_NS.toFixed(1)} ns`;
         return;
       }
-      const currentNs = (frame / (appState.totalFrames - 1)) * FIXED_TOTAL_NS;
+      const currentNs = START_NS + (frame / (appState.totalFrames - 1)) * (END_NS - START_NS);
       dom.timeNsDisplay.textContent = `${currentNs.toFixed(1)} ns`;
     }
 
@@ -1552,6 +1521,7 @@
       try {
         appState.stage.removeAllComponents();
 
+        // NGL 內部自動判斷 .pdb.gz 並於前端直接解壓縮
         const comp = await appState.stage.loadFile(url, {
           defaultRepresentation: false,
           asTrajectory: true
@@ -1603,7 +1573,7 @@
         evaluateTrajectory(initCount);
 
       } catch (err) {
-        console.error('PDB 載入失敗:', err);
+        console.error('結構載入失敗:', err);
         dom.loadingText.textContent = '載入失敗: ' + url;
         dom.loadingSubtext.textContent = '請檢查檔案是否存在且可讀取';
         dom.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
