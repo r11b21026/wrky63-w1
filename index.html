@@ -953,28 +953,26 @@
             'ND2'                // Asn
           ];
 
-          // B1: 蛋白質為供體 (Protein Donor -> DNA Acceptor)
+// B1: 蛋白質為供體 (Protein Donor -> DNA Acceptor)
           Object.keys(pAtoms).forEach(pName => {
             const pAtom = pAtoms[pName];
             if (pAtom.element !== 'N' && pAtom.element !== 'O') return;
 
+            const isMainchain = ['N', 'CA', 'C', 'O', 'OXT'].includes(pName);
+
+            // 【關鍵分流 1】：若在 motif 模式且非特定錨定殘基，跳過主鏈以避免畫面過雜
+            // 但如果當前正在檢查 K117 或 T118，絕對不能跳過主鏈！
+            const isFlankingAnchor = [117, 118].includes(pResno); // 或使用你的變數名稱
+            if (appState.focusMode === 'motif' && isMainchain && !isFlankingAnchor) {
+              return; 
+            }
+
             const isFlexible = flexibleDonors.includes(pName);
             let virtualH = null;
 
-            if (pName === 'N') {
-              if (pAtoms['H']) {
-                virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
-              } else if (pAtoms['CA']) {
-                const vx = pAtom.x - pAtoms['CA'].x;
-                const vy = pAtom.y - pAtoms['CA'].y;
-                const vz = pAtom.z - pAtoms['CA'].z;
-                const vl = Math.hypot(vx, vy, vz) || 1;
-                virtualH = [
-                  pAtom.x + (vx / vl) * 1.0,
-                  pAtom.y + (vy / vl) * 1.0,
-                  pAtom.z + (vz / vl) * 1.0
-                ];
-              }
+            // 只有真正在 PDB 中有提供 H 原子時才使用 H，避免自算 virtualH 造成方向偏差誤殺
+            if (pName === 'N' && pAtoms['H']) {
+              virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
             }
 
             Object.keys(dAtoms).forEach(dName => {
@@ -985,6 +983,7 @@
               let hbondFormed = false;
 
               if (isFlexible) {
+                // 側鏈可旋轉供體 (如 Lys NZ, Thr OG1)
                 if (distDA <= 3.5) {
                   let isValidAngle = true;
                   const prevC = pAtoms['CB'] || pAtoms['CE'] || pAtoms['CZ'] || pAtoms['CD'] || pAtoms['CG'];
@@ -998,15 +997,22 @@
                   }
                   if (isValidAngle) hbondFormed = true;
                 }
-              } else if (distDA <= 3.6) {
-                if (virtualH) {
-                  const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
-                  const angle = calcAngleDeg(
-                    [pAtom.x, pAtom.y, pAtom.z],
-                    virtualH,
-                    [dAtom.x, dAtom.y, dAtom.z]
-                  );
-                  if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
+              } else {
+                // 主鏈 N-H 供體 (或其它剛性供體)
+                if (pName === 'N') {
+                  // 【關鍵修復 2】：主鏈 N 與磷酸根 O
+                  if (virtualH) {
+                    const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
+                    const angle = calcAngleDeg(
+                      [pAtom.x, pAtom.y, pAtom.z],
+                      virtualH,
+                      [dAtom.x, dAtom.y, dAtom.z]
+                    );
+                    if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
+                  } else {
+                    // 若無 H 原子，標準 N...O 距離門檻放寬至 3.5 Å (標準 H-bond 幾何)
+                    if (distDA <= 3.5) hbondFormed = true;
+                  }
                 } else if (distDA <= 3.2) {
                   hbondFormed = true;
                 }
