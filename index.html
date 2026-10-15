@@ -566,15 +566,21 @@
       appState.ssSchemeIds = {
         pymol_ss: NGL.ColormakerRegistry.addScheme(makeSS(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
       };
-appState.motifSchemeId = NGL.ColormakerRegistry.addScheme(function (params) {
+// 核心 WRKYGQK 專用配色：精準覆寫 Carbon，確保 N/O/S/H 100% 保持標準 CPK
+  appState.motifSchemeId = NGL.ColormakerRegistry.addScheme(function (params) {
     this.atomColor = function (atom) {
-      const elem = atom.element;
-      if (elem === 'N') return 0x38bdf8; // 亮天藍 (Nitrogen)
-      if (elem === 'O') return 0xf87171; // 亮珊瑚紅 (Oxygen)
-      if (elem === 'S') return 0xfde047; // 亮黃 (Sulfur)
+      // 確保元素字串去除空白並轉大寫
+      const elem = (atom.element || '').trim().toUpperCase();
+
+      if (elem === 'N') return 0x2563eb; // 純正標準藍色 (Nitrogen)
+      if (elem === 'O') return 0xdc2626; // 純正鮮紅色 (Oxygen)
+      if (elem === 'S') return 0xfacc15; // 鮮黃色 (Sulfur)
       if (elem === 'H') return 0xffffff; // 白色 (Hydrogen)
-      if (elem === 'C') return 0xe879f9; // 碳原子：高亮度薰衣草粉紫（不再發黑，且完全避開 DNA 鹼基的藍、紅、橘、綠）
-      return 0xcbd5e1;
+      
+      // 只有碳 (C) 著粉紫色
+      if (elem === 'C') return 0xe879f9; // 亮粉紫 (若覺得還是太亮/太重，可改 0xd946ef 或 0xc084fc)
+
+      return 0x94a3b8;
     };
   }, 'motif_element_purple');
 }
