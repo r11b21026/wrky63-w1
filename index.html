@@ -1309,14 +1309,14 @@ appState.motifSchemeId = NGL.ColormakerRegistry.addScheme(function (params) {
       if (isAnyFocus) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
           
-          // 【關鍵】：只有核心特寫 (motif) 才改碳原子顏色；K117/T118 (interface) 嚴格維持原本的 'element'
-          const schemeToUse = (appState.focusMode === 'motif') 
-            ? 'motif_core_colored' 
-            : 'element';
+          // 【修正重點 2】：只有核心特寫才傳入自訂 schemeId (透過 color 屬性)，K117/T118 維持原本的 colorScheme: 'element'
+          const colorProps = (appState.focusMode === 'motif' && appState.motifSchemeId)
+            ? { color: appState.motifSchemeId }
+            : { colorScheme: 'element' };
 
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
-            colorScheme: schemeToUse,
+            ...colorProps,
             radius: 0.24,
             opacity: 1.0,
             multipleBond: 'off'
