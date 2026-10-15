@@ -566,7 +566,18 @@
       appState.ssSchemeIds = {
         pymol_ss: NGL.ColormakerRegistry.addScheme(makeSS(0xFF0000, 0xFFFF00, 0x00E000), 'pymol_ss'),
       };
-    }
+NGL.ColormakerRegistry.addScheme(function (params) {
+    this.atomColor = function (atom) {
+      const elem = atom.element;
+      if (elem === 'N') return 0x3b82f6; // 藍色 (Nitrogen)
+      if (elem === 'O') return 0xef4444; // 紅色 (Oxygen)
+      if (elem === 'S') return 0xfacc15; // 黃色 (Sulfur / Cys, Met)
+      if (elem === 'H') return 0xffffff; // 白色 (Hydrogen)
+      if (elem === 'C') return 0xa855f7; // 碳原子自訂色：亮紫色 (與 A/T/C/G 鹼基完全區隔)
+      return 0x94a3b8;                   // 其他元素預設色
+    };
+  }, 'motif_element_purple');
+}
 
     function computeStrandEnds() {
       const st = appState.component.structure;
@@ -1294,12 +1305,18 @@
         });
       }
 
-      // 6. 特寫呈現 (interface 或 motif 模式)
+// 6. 特寫呈現 (interface 或 motif 模式)
       if (isAnyFocus) {
         if (appState.contactProtSele && appState.contactProtSele !== 'none') {
+          
+          // 【關鍵】：只有核心特寫 (motif) 才改碳原子顏色；K117/T118 (interface) 嚴格維持原本的 'element'
+          const schemeToUse = (appState.focusMode === 'motif') 
+            ? 'motif_core_colored' 
+            : 'element';
+
           appState.component.addRepresentation('licorice', {
             sele: appState.contactProtSele,
-            colorScheme: 'element',
+            colorScheme: schemeToUse,
             radius: 0.24,
             opacity: 1.0,
             multipleBond: 'off'
