@@ -977,19 +977,30 @@
 
             const isMainchain = ['N', 'CA', 'C', 'O', 'OXT'].includes(pName);
 
-            // 【關鍵分流 1】：若在 motif 模式且非特定錨定殘基，跳過主鏈以避免畫面過雜
-            // 但如果當前正在檢查 K117 或 T118，絕對不能跳過主鏈！
-            const isFlankingAnchor = [117, 118].includes(pResno); // 或使用你的變數名稱
-            if (appState.focusMode === 'motif' && isMainchain && !isFlankingAnchor) {
-              return; 
+            // 【修復】：只跳過非供體的主鏈原子 (CA, C, O, OXT)
+            // 主鏈 N 原子的 N-H 具有關鍵結合能力（如 Y111 主鏈），必須完整保留！
+            if (isMainchain && pName !== 'N') {
+              return;
             }
 
             const isFlexible = flexibleDonors.includes(pName);
             let virtualH = null;
 
-            // 只有真正在 PDB 中有提供 H 原子時才使用 H，避免自算 virtualH 造成方向偏差誤殺
-            if (pName === 'N' && pAtoms['H']) {
-              virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
+            if (pName === 'N') {
+              if (pAtoms['H']) {
+                virtualH = [pAtoms['H'].x, pAtoms['H'].y, pAtoms['H'].z];
+              } else if (pAtoms['CA']) {
+                // 若 PDB 軌跡未帶氫原子，利用 CA 向量沿反方向推估 N-H 供體方位
+                const vx = pAtom.x - pAtoms['CA'].x;
+                const vy = pAtom.y - pAtoms['CA'].y;
+                const vz = pAtom.z - pAtoms['CA'].z;
+                const vl = Math.hypot(vx, vy, vz) || 1;
+                virtualH = [
+                  pAtom.x + (vx / vl) * 1.01,
+                  pAtom.y + (vy / vl) * 1.01,
+                  pAtom.z + (vz / vl) * 1.01
+                ];
+              }
             }
 
             Object.keys(dAtoms).forEach(dName => {
@@ -1015,9 +1026,8 @@
                   if (isValidAngle) hbondFormed = true;
                 }
               } else {
-                // 主鏈 N-H 供體 (或其它剛性供體)
+                // 主鏈 N-H 供體 (包含 Y111 主鏈)
                 if (pName === 'N') {
-                  // 【關鍵修復 2】：主鏈 N 與磷酸根 O
                   if (virtualH) {
                     const distHA = Math.hypot(virtualH[0] - dAtom.x, virtualH[1] - dAtom.y, virtualH[2] - dAtom.z);
                     const angle = calcAngleDeg(
@@ -1025,9 +1035,11 @@
                       virtualH,
                       [dAtom.x, dAtom.y, dAtom.z]
                     );
-                    if (angle >= 120.0 && distHA <= 2.6) hbondFormed = true;
+                    // 幾何標準：D-H..A 夾角 >= 115° 且 H..A 距離 <= 2.6 Å，或重原子距離 <= 3.4 Å 且夾角 >= 110°
+                    if ((angle >= 115.0 && distHA <= 2.6) || (distDA <= 3.4 && angle >= 110.0)) {
+                      hbondFormed = true;
+                    }
                   } else {
-                    // 若無 H 原子，標準 N...O 距離門檻放寬至 3.5 Å (標準 H-bond 幾何)
                     if (distDA <= 3.5) hbondFormed = true;
                   }
                 } else if (distDA <= 3.2) {
